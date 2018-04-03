@@ -1,0 +1,104 @@
+﻿ubuntu12.04下搭建L开发环境
+
+MTK提示确保gcc版本为4.6.3 多一点少一点都不行
+
+step1: 设置root账号密码
+sudo passwd root
+然后切到root用户
+su -
+
+step2: 设置默认下载服务器
+右上角设置按钮->Updates Available->Settings->Ubuntu Software->Download from 选择一个中国服务器
+
+step3: 下载编译所需工具库
+apt-get update
+
+apt-get install -y git gnupg flex bison gperf build-essential \
+zip curl libc6-dev libncurses5-dev:i386 x11proto-core-dev \
+libx11-dev:i386 libreadline6-dev:i386 libgl1-mesa-glx:i386 \
+g++-multilib mingw32 tofrodos libgl1-mesa-dev \
+python-markdown libxml2-utils xsltproc zlib1g-dev:i386
+
+执行上述语句可能提示libc-dev:i386找不到依赖库，使用以下指令解决
+apt-get -f install linux-libc-dev:i386
+
+ln -s /usr/lib/i386-linux-gnu/mesa/libGL.so.1 /usr/lib/i386-linux-gnu/libGL.so
+
+step4：下载jdk7
+android L以上版本要求jdk7
+sudo apt-get -y install openjdk-7-jdk
+以上形式安装的jdk不用配置环境变量
+
+Ubuntu下安装最新OpenJdk1.8 
+1.sudo add-apt-repository ppa:openjdk-r/ppa
+
+2.sudo apt-get update
+
+3.sudo apt-get install openjdk-8-jdk
+
+JDK切换
+sudo update-alternatives --config java
+
+JDK默认
+sudo update-alternatives --config javac
+
+step5: 配置samba服务器
+ubuntu默认有samba，但是并不能直接用
+
+下载samba
+sudo apt-get install samba
+sudo apt-get install smbfs
+sudo apt-get install samba samba-common
+
+修改配置
+gedit /etc/samba/smb.conf
+
+在[global]字段中添加
+usershare owner only = false
+
+guest account = root
+create mask = 666
+directory mask = 777
+
+修改#   security = user 为 security = share
+
+在文件末尾添加
+[share]
+comment = share
+path = /home/gcz/works  <---要共享的目录
+browseable = yes
+guest ok = yes
+writable = yes
+read only = no
+public = yes
+
+sudo smbpasswd -a wanghuan
+
+最后sudo /etc/init.d/smbd restart或者service smbd restart 重启服务
+
+如果要使用SecureCRT putty等工具，还要安装ssh
+sudo apt-get install openssh-server
+
+
+
+2.Ubuntu SVN 升级
+
+步骤：
+
+1.sudo apt-get remove subversion  卸载掉之前安装的svn
+
+2.sudo apt-add-repository ppa:dominik-stadler/subversion-1.8  添加svn 1.8资源库
+
+3.sudo apt-get update  更新服务器最新的软件包
+
+4.sudo apt-get install libsvn-java  安装依赖的java库
+
+5.sudo  apt-get install subversion  安装新版svn
+
+
+ubuntu下硬盘挂载：
+sudo fdisk -lu 查看当前硬盘，得到要挂载的盘的路径,如sda sdb sdc
+sudo blkid /dev/sda 查看硬盘的ID 如不存在需要先格式化分区
+sudo mkfs  ext4 /dev/sda
+例子 UUID=904C23B64C23964E /media ext4 defaults        0      2
+

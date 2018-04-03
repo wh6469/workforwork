@@ -1,0 +1,123 @@
+#!/bin/bash
+
+echo " "
+echo "=====Copy Start====="
+
+propPath=$(find out/target/product/*/system -maxdepth 1 -name build.prop)
+project=${propPath%/system/*} && project=${project#*/product/}
+sourcePath=${propPath%/system/*}
+echo -n "工程名称:"
+echo $project
+
+var1=$(grep "ro.build.vsun.swver.inner=" $propPath)
+Iversion1=${var1##"ro.build.vsun.swver.inner="}
+echo -n "内部版本号:"
+echo $Iversion1
+
+var2=$(grep "ro.build.display.id=" $propPath)
+Pversion=${var2##"ro.build.display.id="}
+echo -n "客户版本号:"
+echo $Pversion
+
+if [[ $Pversion == *test-keys* ]]
+then
+	Pversion=$project
+fi
+
+if [ "$Iversion" = "" ]
+then
+	Iversion=$Pversion
+fi
+
+time=$(date +%Y-%m-%d-%H-%M)
+echo -n "拷贝时间:"
+echo $time
+
+if [ "$1" = "" ]
+then
+	folder=$Iversion\_$time
+else
+	folder=$Iversion\_$time\_$1
+fi
+
+destinationPath="../release/${folder// /}/${Pversion// /}"
+if [ ! -d $destinationPath ];then
+	mkdir -p "$destinationPath"
+fi
+
+destinationPathdb="$destinationPath/dataBase"
+if [ ! -d $destinationPathdb ];then
+	mkdir -p "$destinationPathdb"
+fi
+destinationPathSource="$destinationPath/download"
+if [ ! -d $destinationPathSource ];then
+	mkdir -p "$destinationPathSource"
+fi
+echo -n "拷贝路径:"
+echo $destinationPath
+
+copyResult(){
+	#cp $sourcePath/root/file_contexts $destinationPath
+    copydownload
+	copydatabase
+	copyotafile
+    git log --graph> $destinationPathSource/gitlog.txt
+}
+
+copyotafile()
+{
+	tmpFile0=$(find $sourcePath/ -maxdepth 1 -name "*$project*.zip")
+	if [ -f "$tmpFile0" ]; then
+			mkdir -p "../release/$folder/SD卡升级包/"
+		cp $tmpFile0 ../release/$folder/SD卡升级包/update.zip
+	else
+	echo 提示：无可拷贝的sd卡包
+	fi
+
+	tmpFile1=$(find $sourcePath/ -maxdepth 1 -name "*target_files.zip")
+	echo $tmpFile1
+	if [ -f "$tmpFile1" ]; then
+		mkdir -p "../release/$folder/OTA原始包/"
+		cp $tmpFile1 ../release/$folder/OTA原始包/$Pversion\_$Iversion1\_target_files-package.zip
+		#cp $sourcePath/obj/KERNEL_OBJ/vmlinux ../release/$folder/
+	else
+	echo 提示：无可拷贝的ota包 或是存在多个ota包
+	fi	
+}
+
+copydownload()
+{
+	tmpfile=$(find $sourcePath -maxdepth 1 -name *BR* -o -name *Android_scatter*.txt)
+	for f in $tmpfile
+	do
+		if [ -f $f ];then
+			cp $f $destinationPathSource
+		fi
+	done
+
+	rsync -r --delete --exclude="*-verified*.*" --exclude="*ramdisk*.img" --exclude="*_bthdr.img" --exclude="preloader.img" $sourcePath/*.img $destinationPathSource
+	rsync -r --delete --exclude="*-verified*.*" --exclude="preloader.bin"  $sourcePath/*.bin $destinationPathSource
+}
+
+copydatabase()
+{
+	#echo copy database begin
+
+	ismodem6739=$(find $sourcePath/vendor/ -name "MDDB_InfoCustomAppSrcP*")
+	if [ -f "$ismodem6739" ]; then
+	cp $(find $sourcePath/vendor/ -name "MDDB_InfoCustomAppSrcP*") $destinationPathdb
+	echo -----is6739modem-----
+	fi
+	ismodem6737=$(find $sourcePath/vendor/ -name "BPLGUInfoCustomApp*")
+	if [ -f "$ismodem6737" ]; then
+	cp $(find $sourcePath/vendor/ -name "BPLGUInfoCustomApp*") $destinationPathdb
+	echo -----is6737modem-----
+	fi
+	find $sourcePath/ -name "APDB_*" ! -name "*_ENUM" -exec cp {} $destinationPathdb \;
+
+    #echo modem database end
+}
+
+copyResult
+echo "======Copy End======"
+echo " "

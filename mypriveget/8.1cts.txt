@@ -1,0 +1,11 @@
+﻿查看手机是否支持a/b升级：
+adb shell getprop|grep update 显示[ro.build.ab_update]: [true]即支持a/b升级
+
+VTS 8.1有r3版本了
+https://pan.baidu.com/s/1_AvZ6RDyFWeY0O7qY5HiOQ
+密码: wbsm
+
+
+
+vts
+CONFIG_MTK_GMO_RAM_OPTIMIZE

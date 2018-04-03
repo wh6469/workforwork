@@ -1,0 +1,19 @@
+﻿repo sync 确认存在版本更新
+find ./  -mmin -180 >time.txt---------得到最新的更新文件，大版本需要整个拷贝对比 差分
+find ./ -name '.gitignore' -type f | xargs rm -r ------去掉git相关的文件
+cat copy.txt | xargs -I % cp --parents % copyfiles/ ----------git status得到需要拷贝的copy.txt 处理需要add和delete的文件
+
+
+
+repo 使用
+repo forall -pc "git log --no-merges --oneline --since=2017-11-15"
+
+
+repo init -u http://git01.mediatek.com/alps_release/platform/manifest -b vsun -m alps-release-o0.mp1-default.xml --no-repo-verify
+
+
+1.先定期执行repo sync mtk_git  查看最近的更新
+2.在mtk_repo_mirror 中更换对应的url 然后 repo sync
+3.在对应的工程下repo status  git status 查看当前整个代码仓库的状态，确认好后执行repo  sync
+4.git status 查看更改，更改过多时  输入到指定文本，分别处理 modeify  delete  new add的文件
+  新的文件夹注意检查.git
