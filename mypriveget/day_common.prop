@@ -37,11 +37,6 @@ yiyi0207
 linux fuwuqi 
 root-----wh
 
-6.MTKonline：https://sso.mediatek.com/eai/Login.aspx
-       账号:huangchen@vsunmobile.com  密码:sw1012
-吴星标 9:50:42
-7.E-Service:   http://eservice.mediatek.com/eservice-portal/login
-       账号:vsun-sw 密码:vsunsw1012
 keytool -list -printcert -jarfile xx.apk
 
 
@@ -74,14 +69,6 @@ sudo update-grub2
 sudo vim /boot/grub/grub.cfg
 sudo service trld restart
 
-/*********************************************************
-展讯CQ系统（提交问题bug） 
-地址：http://222.66.158.139:2008/cqweb/ 
-账户： lensun (全小写) 
-密码：  LS36880399   旧：jUld6da7Fm （注意大小写）
-/*********************************************************
-
-teamonline
 wanghuanvsun
 
 
