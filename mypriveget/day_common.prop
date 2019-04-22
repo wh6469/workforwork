@@ -118,3 +118,18 @@ sudo apt-get install git
 
 modem编译不过，安装xml库
 sudo apt-get install libxml-simple-perl
+
+
+查看apk的签名信息
+keytool -list -printcert -jarfile path
+
+    new String[] {AT+ECFGSET="user_agent","mobiistar_X1_Notch_V1.09", ""}, msg);     
+更新
+find vendor/mediatek/proprietary/trustzone/ -exec touch {} \;
+
+
+szauieroh@gmail.com sz19930315
+
+输入辅助邮箱szauiero@gmail.com
+
+Instagram账户：qq3791 08yuboox 18682288082

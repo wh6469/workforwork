@@ -1,0 +1,68 @@
+﻿常用的adb命令：
+adb disable-verity					
+adb shell df > df.txt									查看ROM使用情况												
+adb shell cat /proc/cpuinfo								获取CPU型号等信息													
+adb shell screenrecord  /sdcard/pd_verification.mp4					录制屏幕
+adb shell screencap -p /sdcard/screen.png						截屏
+adb shell cat /proc/meminfo								内存信息
+adb shell pm list package								列出所有的应用的包名
+adb shell pm list packages -s								列出系统应用的所有包名
+adb shell pm list package -3								列出第三方应用
+adb shell pm list package -f								列出应用包名及对应的apk名及存放位置
+adb shell pm list package -i								列出应用包名及其安装来源
+adb shell pm path com.tencent.mobileqq 							pm path 列出对应包名的 .apk 位置
+adb shell pm dump com.tencent.mobileqq							pm dump , 后跟包名，列出指定应用的 dump 信息，里面有各种信息，自行查看
+adb shell pm clear com.tencent.mobileqq							清除应用数据与缓存
+
+adb shell am start -n com.android.camera/.Camera					启动系统相机应用
+adb shell am force-stop packagename							强制停止应用
+adb shell am broadcast -a "test_intent_name" 						通过adb命令发送广播
+adb shell input text test123456								向 Android 设备输入文本
+adb shell input keyevent KEYCODE_HOME							向 Android 设备发送按键事件
+adb shell input tap 500 500								input tap , 对屏幕发送一个触摸事件
+adb shell input swipe 900 500 100 500							input swipe , 滑动事件
+adb shell uiautomator dump  								获取当前界面的控件信息
+adb shell ime list -s   								列出设备上的输入法
+adb shell wm size									获取设备分辨率
+
+adb shell ls /system/app/ 								显示系统程序清单
+adb shell service list									查看后台services信息
+adb shell top										查看设备上进程的cpu和内存占用情况
+adb shell dumpsys power									查看系统的wakelock
+
+
+adb logcat -s "TAG_name"								在命令行中查看LOG信息
+adb logcat | grep "test"								从log中查找test
+adb logcat | findstr "test"								仅用于 windows 下 
+
+adb shell dumpsys meminfo > meminfo.txt							查看手机内存使用情况
+adb shell dumpsys meminfo <package_name|PID>						查看某一个app的内存占用
+adb shell getprop | grep heapgrowthlimit						查看单个应用程序的最大内存限制
+adb shell dumpsys cpuinfo > cpuinfo.txt							保存CPU使用等信息		
+adb shell "cat proc/gpufreq/gpufreq_opp_dump"						查看GPU频率
+
+
+adb shell dumpsys batterystats --reset							清除测试前的电量数据
+adb shell dumpsys batterystats > batterystats.txt					池信息保存到batterystats.txt文件
+adb shell dumpsys batterystats packagename > x.txt					获取单个应用的电量消耗信息
+adb shell dumpsys batterystats --enable full-wake-history				详细的分析wakelock事件
+
+adb bugreport > bugreport.txt								从设备端获取待分析的Battery信息
+adb bugreport bugreport.zip								从设备端获取待分析的Battery信息(Ubuntu下才能执行)
+ 
+ 
+adb shell monkey -p com.android.settings 5000 > d:\monkey.log 				在 PC 端执行 monkey 命令，将信息保存至 D 盘 monkey.log
+adb shell "monkey -p com.android.settings 5000 > sdcard/monkey.log" 			在 PC 端执行 monkey 命令，将信息保存至手机的 Sdcard
+
+#############################################################################
+
+
+adb shell am start -n  com.mediatek.mtklogger/.MainActivity
+
+adb shell am start -S -R 1 -W sogou.mobile.explorer.BrowserActivity
+
+
+查看对应进程的内存使用
+adb shell top -n 10 | grep proc_ id
+先adb shell  ps > x 找到camerahalserver的pid
+
