@@ -1,0 +1,39 @@
+官方指导
+sudo apt-get install git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip
+
+高通
+sudo apt-get install git-core gnupg flex bison gperf build-essential zip curl zlib1g-dev libc6-dev lib32ncurses5-dev ia32-libs x11proto-core-dev libx11-dev lib32readline-gplv2-dev lib32z1-dev libgl1-mesa-dev g++-multilib mingw32 tofrodos python-markdown libxml2-utils xsltproc libssl-dev libxml-parser-perl
+
+
+====================ia32-libs 的安装========================
+1。切换到root权限
+       sudo -i
+
+2。进入apt源列表
+
+      cd /etc/apt/sources.list.d
+
+3。添加ubuntu 13.04的源，因为13.10的后续版本废弃了ia32-libs
+
+ echo "deb http://old-releases.ubuntu.com/ubuntu/ raring main restricted universe multiverse" > ia32-libs-raring.list
+
+
+
+4。更新源并安装ia32-libs
+
+      apt-get update
+
+      apt-get install ia32-libs
+
+
+
+5。恢复源
+
+      rm ia32-libs-raring.list
+
+      apt-get update
+--------------------- 
+作者：maojun1986 
+来源：CSDN 
+原文：https://blog.csdn.net/maojun1986/article/details/38670047 
+版权声明：本文为博主原创文章，转载请附上博文链接！
