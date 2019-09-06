@@ -1,0 +1,105 @@
+Use mirror to save time and space
+
+Why use mirror:
+
+When using several clients, it is better to create a local mirror, and to sync code from that mirror (which requires less network access and save space/download time).
+
+ 
+
+Setp1: Create mirror (only need to setup one time)
+
+$mkdir  ~/repo_mirror   /*create mirror folder , only need to setup one time for you local environment for all branch*/
+$cd ~/repo_mirror
+$repo init -u http://git01.mediatek.com/alps_release/platform/manifest -b <customer> -m <manifest>  --mirror  /* choose one branch as mirror*/
+
+e.g. $repo init -u http://git01.mediatek.com/alps_release/platform/manifest -b mtk -m alps-release-n1.mp5-default.xml --mirror
+
+$repo sync -f -j8 --prune
+
+Step2: Use mirror
+
+$mkdir ~/a_branch_codebase & cd ~/ a_branch_codebase
+$repo init -u http://git01.mediatek.com/alps_release/platform/manifest -b <customer> -m <manifest>  --reference=~/repo_mirror  /* remember to add --reference=<mirror path> when do init. it's important to specify an absolute path*/
+$repo sync -f -c  /* -c: just sync current init branch */
+
+ 
+
+R  Reminder:  please update mirror regularly to keep the mirror codebase up-to-date
+
+How to update mirror:
+
+$cd ~/repo_mirror
+
+$repo init -u http://git01.mediatek.com/alps_release/platform/manifest  -b <customer> -m <manifest>  /* please use xxx-default.xml  it will always follow the latest lock build version and without --mirror*/
+
+$repo sync -f -j8 --prune
+
+======================================================================================================================================
+1: Save your Gerrit account & password into ~/.netrc  (just for first time)
+
+/*MTK will provide the account & password to you*/
+$vim ~/.netrc
+
+(in editor) press ‘i’ and add below settings at the end of the ~/.netrc file:
+
+machine git01.mediatek.com login <mtk_git_account> password <mtk_git_pwd>
+
+e.g.  for test account:
+
+machine git01.mediatek.com login test-sp-git01-user password kPWG7zf4K5
+
+
+
+ 
+
+2: Sync Codebase
+
+/* make sure your Git environment is ready (git version > 1.9.1) */
+
+/* make sure you already install Google repo tool or mtk repo tool*/
+
+Please use below commands to get codebase from Git
+
+Step 1:  Make a new directory to save the download
+
+$mkdir <working folder> && cd <working folder>
+
+e.g. $mkdir mtk-git && cd mtk-git
+
+Step 2:  Codebase Initialize
+
+$repo init -u http://git01.mediatek.com/alps_release/platform/manifest -b <customer> -m <manifest> --no-repo-verify
+
+<customer>: it is customer's short name
+<manifest>: specific branch and version
+e.g. If mtk want to initialize the branch: alps-release-n1.mp5
+Note: mtk is for test, only has 3 repos.
+        Scenario I:  init latest version
+
+$repo init -u http://git01.mediatek.com/alps_release/platform/manifest -b mtk -m alps-release-n1.mp5-default.xml --no-repo-verify
+
+        Scenario II:  init version P1
+
+$repo init -u http://git01.mediatek.com/alps_release/platform/manifest -b mtk -m t-alps-release-n1.mp5_P1.xml --no-repo-verify
+
+Scenario II:  init version P2
+
+$repo init -u http://git01.mediatek.com/alps_release/platform/manifest -b mtk -m t-alps-release-n1.mp5_P2.xml --no-repo-verify
+
+Step2: Sync code from Git server to your working folder
+
+Scenario I:  Sync full codebase
+
+$repo sync -c -f -j8 --optimized-fetch --no-repo-verify
+
+Scenario II:  Sync 1 repository
+
+$repo sync <repository name>      /*<repository name > can be repository name or repository path */
+
+e.g. $repo sync device/common
+
+Scenario III:  Sync multiple repositories
+
+$repo sync <repository name1 repository name2>    /* repositpry1 repository2 separated by space */
+
+e.g $repo sync platform/art platform/abi/cpp
