@@ -1,0 +1,2700 @@
+commit d736f0283c0c9f644e9c1357fc91c7c6e289515a
+Author: wanghuan <wanghuan@kingberry.com.cn>
+Date:   Fri Aug 9 14:52:05 2019 +0800
+
+    [应用白名单]添加应用白名单功能
+
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/msm8937_64/msm8937_64.mk b/LA.UM.7.6.2/LINUX/android/device/qcom/msm8937_64/msm8937_64.mk
+index ac04a62..58b9aff 100644
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/msm8937_64/msm8937_64.mk
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/msm8937_64/msm8937_64.mk
+@@ -165,6 +165,9 @@ AUDIO_DLKM += audio_machine_ext_sdm450.ko
+ PRODUCT_PACKAGES += $(AUDIO_DLKM)
+ endif
+ 
++PRODUCT_COPY_FILES += packages/kb/apkins/package_ins_cfg:system/data/apkins/package_ins_cfg
++PRODUCT_PACKAGES += white
++
+ # MIDI feature
+ PRODUCT_COPY_FILES += \
+     frameworks/native/data/etc/android.software.midi.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.software.midi.xml
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/file.te b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/file.te
+index 9ea7e86..3a3bf1e 100644
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/file.te
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/file.te
+@@ -35,4 +35,5 @@ type qvrd_data_file, file_type, data_file_type, core_data_file_type;
+ type qvrd_socket, file_type, mlstrustedobject, coredomain_socket;
+ type qvrd_hvx_socket, file_type, coredomain_socket;
+ type mirrorlink_data_file, file_type, data_file_type, core_data_file_type;
+-type mirrorlink_socket, file_type, coredomain_socket;
+\ No newline at end of file
++type mirrorlink_socket, file_type, coredomain_socket;
++type pack_inscfg_file, file_type, data_file_type,core_data_file_type;
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/file_contexts b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/file_contexts
+index 23c3606..0f1976b 100644
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/file_contexts
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/file_contexts
+@@ -63,3 +63,4 @@
+ /data/dpm(/.*)?                                 u:object_r:dpmd_data_file:s0
+ /data/misc/qvr(/.*)?                            u:object_r:qvrd_data_file:s0
+ /data/misc/mirrorlinkserver(/.*)?               u:object_r:mirrorlink_data_file:s0
++/data/apkins(/.*)? u:object_r:pack_inscfg_file:s0
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/platform_app.te b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/platform_app.te
+index 88a11d5..3c79db7 100644
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/platform_app.te
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/platform_app.te
+@@ -37,4 +37,6 @@ userdebug_or_eng(`
+   allow platform_app seemp_data_file: file w_file_perms;
+ ')
+ allow platform_app color_service:service_manager find;
+-
++allow platform_app pack_inscfg_file:dir { search open read write add_name create getattr setattr };
++allow platform_app pack_inscfg_file:file {open read write create append unlink ioctl getattr setattr };
++allow platform_app pack_inscfg_file:fifo_file { read write open create setattr};
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/system_app.te b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/system_app.te
+index f7809e3..da0a754 100644
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/system_app.te
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/system_app.te
+@@ -46,10 +46,14 @@ binder_call(system_app, smcinvoke_daemon)
+ binder_call(system_app, mirrorlink);
+ # allow system app to connect to mirrorlink_socket
+ unix_socket_connect(system_app, mirrorlink, mirrorlink);
+-
++#allow system_app system_data_file:dir {write};
+ # As part of ashmem movement tmpfs access to restricted to
+ # its own domnan but appdomain ( which include system_app)
+ # need access to the system_server_tmpfs based on the change
+ # 9f5d0d90a3a5b479c19fda7b528471f16b773546 we are adding
+ # this rule
+ allow system_app system_server_tmpfs:file { getattr map read write };
++allow system_app pack_inscfg_file:dir { search open read write add_name create getattr setattr };
++allow system_app pack_inscfg_file:file { open read write create append unlink ioctl getattr setattr };
++allow system_app pack_inscfg_file:fifo_file { read write open create setattr};
++#allow system_app system_data_file:file { open write};
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/system_server.te b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/system_server.te
+index 37ad57f..68c4ba1 100755
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/system_server.te
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/system_server.te
+@@ -41,7 +41,9 @@ allow system_server izat_service:service_manager add;
+ 
+ #Allow system_server to add and find regionalization service
+ add_service(system_server, regionalization_service);
+-
++allow system_server pack_inscfg_file:dir { search open read write add_name create getattr setattr };
++allow system_server pack_inscfg_file:file {open read write create append unlink ioctl getattr setattr };
++allow system_server pack_inscfg_file:fifo_file { read write open create setattr};
+ #Allow system_server to add and find perf service
+ #add_service(system_server, vendor_perf_service);
+ allow system_server vendor_perf_service:service_manager find;
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/untrusted_app.te b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/untrusted_app.te
+index d2ebffa..e6fed47 100644
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/untrusted_app.te
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/private/untrusted_app.te
+@@ -28,6 +28,11 @@
+ unix_socket_connect(untrusted_app,dpmtcm, dpmd);
+ allow untrusted_app dpmtcm_socket:sock_file w_file_perms;
+ allow untrusted_app dpmwrapper_socket:sock_file w_file_perms;
++
++allow untrusted_app pack_inscfg_file:dir { search open read write add_name create getattr setattr };
++allow untrusted_app pack_inscfg_file:file {open read write create append unlink ioctl getattr setattr };
++allow untrusted_app pack_inscfg_file:fifo_file { read write open create setattr};
++
+ allow untrusted_app dpmd:unix_stream_socket connectto;
+ userdebug_or_eng(`
+   r_dir_file(untrusted_app, seemp_data_file)
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/public/file.te b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/public/file.te
+index 0d9512f..c9baf17 100644
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/public/file.te
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/public/file.te
+@@ -26,3 +26,4 @@
+ # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
+ type dpmtcm_socket, file_type, coredomain_socket, mlstrustedobject;
++#type pack_inscfg_file, file_type, data_file_type;
+diff --git a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/vendor/common/system_server.te b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/vendor/common/system_server.te
+index 28d7d0b..9f25fc2 100644
+--- a/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/vendor/common/system_server.te
++++ b/LA.UM.7.6.2/LINUX/android/device/qcom/sepolicy/vendor/common/system_server.te
+@@ -178,7 +178,7 @@ hal_client_domain(system_server, hal_wigig)
+ hal_client_domain(system_server, hal_wigig_npt)
+ # allow WIGIG framework access to wil6210 sysfs files like thermal_throttling
+ allow system_server sysfs_wigig:file rw_file_perms;
+-
++#allow system_server sysfs:file { open read};
+ # allow system_server to access IOP HAL service
+ hal_client_domain(system_server, hal_iop)
+ 
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/IWhiteListUtil.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/IWhiteListUtil.java
+new file mode 100644
+index 0000000..57d4e7f
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/IWhiteListUtil.java
+@@ -0,0 +1,40 @@
++/**
++*  Copyright (C) 2014 The Kingberry Source Project
++*  Create time : 2014-6-30
++*  @ author  : zheng jinhua
++*  Create for  : application install white list interface
++**/
++//kingberry.ws add for APPLICATION_INSTALL_WHITELIST -s
++package com.android.server;
++public interface IWhiteListUtil
++{
++    /**
++     * init white list store path default:/data/apkins/package_ins_cfg
++     * 
++     * @param path
++     * @return
++     */
++    public int init(String path);
++
++    /**
++     * check if current packageName can be install on system.
++     * 
++     * @param packageName
++     * @param prefix
++     */
++    public  boolean checkInstallPermission(String packageName);
++
++    public static final int STATUS_ALL_ALLOW = 1;
++    public static final int STATUS_ALL_FORBID = 2;
++    public static final int STATUS_SPECIFIED = 3;
++    /**
++     * return white list enum
++     * 
++     * @return
++     */
++    public int status();
++
++}
++//kingberry.ws add for APPLICATION_INSTALL_WHITELIST -e
++
++
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+index f135e64..5f3673c 100755
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+@@ -371,6 +371,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.function.Predicate;
+ 
++//kingberry modify for APPLICATION_INSTALL_WHITELIST -s
++import com.android.server.WhiteList;
++import android.widget.Toast;
++import android.text.TextUtils;
++//import com.kby.common.featureoption.FeatureOption;
++
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.FileWriter;
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.io.OutputStreamWriter;
++//import android.provider.Settings;
++//kingberry modify for APPLICATION_INSTALL_WHITELIST -e
+ /**
+  * Keep track of all those APKs everywhere.
+  * <p>
+@@ -448,6 +463,9 @@ public class PackageManagerService extends IPackageManager.Stub
+     private static final int NFC_UID = Process.NFC_UID;
+     private static final int BLUETOOTH_UID = Process.BLUETOOTH_UID;
+     private static final int SHELL_UID = Process.SHELL_UID;
++    //kingberry modify for APPLICATION_INSTALL_WHITELIST -s
++    private boolean mCodeTag=true;
++    //kingberry modify for APPLICATION_INSTALL_WHITELIST -e
+     private static final int SE_UID = Process.SE_UID;
+ 
+     // Suffix used during package installation when copying/moving
+@@ -3277,6 +3295,20 @@ public class PackageManagerService extends IPackageManager.Stub
+             }
+         } // synchronized (mPackages)
+         } // synchronized (mInstallLock)
++		
++		//kingberry modify for APPLICATION_INSTALL_WHITELIST -s
++        //try {
++            //we can disable this feature by config project file
++            //if(FeatureOption.WHITE_LIST_SUPPORT){
++                //mCodeTag = !readDisabledCfg();
++				//mCodeTag=android.provider.Settings.System.getInt(mContext.getContentResolver(),"EXTRA_WHITE_LIST_ENABLE", 0)==0?false:true;
++            //} else{
++            //    mCodeTag = false;
++            //}
++        //} catch (Exception e) {
++         //   e.printStackTrace();
++        //}
++        //kingberry modify for APPLICATION_INSTALL_WHITELIST -e
+ 
+         // Now after opening every single application zip, make sure they
+         // are all flushed.  Not really needed, but keeps things nice and
+@@ -3292,6 +3324,53 @@ public class PackageManagerService extends IPackageManager.Stub
+ 
+         Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+     }
++	
++	//kingberry modify for APPLICATION_INSTALL_WHITELIST -s
++   public static final int mKey = 997;
++    public static final int mKey2 = 97;
++    public static final String mDefaultPath = "/data/apkins/cfg";
++    /**
++     * @param s
++     *            value = 12345(ON) / 54321(OFF)
++     * @return
++     */
++   private int encrypt(int s) {
++        return (s + mKey) * mKey2;
++    }
++
++    private int decrypt(int s) {
++        return s / mKey2 - mKey;
++    }
++    
++    /**
++     * @return = true means close white list, false means open white list
++     *         function
++     */
++    public boolean readDisabledCfg() {
++        File f = new File(mDefaultPath);
++        if (!f.exists()) {
++            return false;
++        }
++        try {
++            FileInputStream fis = new FileInputStream(f);
++            InputStreamReader reader = new InputStreamReader(fis);
++            char[] buf = new char[100];
++            int len = reader.read(buf);
++            fis.close();
++            reader.close();
++            if (len > 0) {
++                String s = String.valueOf(buf, 0, len);
++                Integer teg = Integer.parseInt(s);
++                if (decrypt(teg.intValue()) == 54321) {
++                    return true;
++                }
++            }
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
++        return false;
++    }
++    //kingberry modify for APPLICATION_INSTALL_WHITELIST -e
+ 
+     /**
+      * Uncompress and install stub applications.
+@@ -16468,6 +16547,20 @@ public class PackageManagerService extends IPackageManager.Stub
+             }
+         }
+ 
++        //kingberry modify for APPLICATION_INSTALL_WHITELIST -s
++		mCodeTag=android.provider.Settings.System.getInt(mContext.getContentResolver(),"EXTRA_WHITE_LIST_ENABLE", 0)==0?false:true;
++        Log.v(TAG, " check whitelist permission : mCodeTag = " + mCodeTag + ", pkgName = " + pkgName);
++        if(mCodeTag && !TextUtils.isEmpty(pkgName)) {
++                WhiteList wl = new WhiteList();
++                boolean flag = wl.checkInstallPermission(pkgName);
++                if(!flag) {
++                    Toast.makeText(mContext, "Sorry, You not have to right to install this application", Toast.LENGTH_SHORT).show();
++                    res.returnCode = PackageManager.INSTALL_FAILED_INVALID_APK; 
++                    return;
++                }
++        }
++        //kingberry modify for APPLICATION_INSTALL_WHITELIST -e
++
+         try {
+             PackageParser.Package newPackage = scanPackageTracedLI(pkg, parseFlags, scanFlags,
+                     System.currentTimeMillis(), user);
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/pm/WhiteList.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/pm/WhiteList.java
+new file mode 100644
+index 0000000..6690523
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/pm/WhiteList.java
+@@ -0,0 +1,144 @@
++/**
++*  Copyright (C) 2014 The Kingberry Source Project
++*  Create time : 2014-6-30 
++*  @ author  : wang song
++*  Create for  : application install white list implements IWhiteListUtil
++**/
++//kingberry.ws add for APPLICATION_INSTALL_WHITELIST -s
++package com.android.server;
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileNotFoundException;
++import java.io.FileReader;
++import java.io.IOException;
++import java.util.ArrayList;
++import android.text.TextUtils;
++import android.util.Log;
++
++public class WhiteList implements IWhiteListUtil {
++	private static final int USE_DEFAULT = 1;
++	private static final int USE_CUSTOM = 2;
++	private static final String TAG = "WhiteList";
++	private String mDefaultPath = "/data/apkins/package_ins_cfg";
++
++	public WhiteList(String defalutPath) {
++		this.mDefaultPath = defalutPath;
++	}
++
++	public WhiteList() {
++	}
++
++	@Override
++	public int init(String path) {
++		if (path != null) {
++			mDefaultPath = path;
++			return USE_CUSTOM;
++		}
++		else {
++			return USE_DEFAULT;
++		}
++	}
++
++        /**
++         * return ture, if permission check pass
++         * return false,when you dont have the permission to install
++         */
++	@Override
++	public boolean checkInstallPermission(String packageName) {
++		ArrayList<String> mWhiteListNames = new ArrayList<String>();
++		if (packageName == null) {
++			return false;
++		}
++		else {
++			try {
++				if (mDefaultPath == null) {
++					return false;
++				}
++				else {
++					File f = new File(mDefaultPath); 	// get the white list name;
++					mWhiteListNames = readFile(f);
++					Log.d(TAG, "ws add mWhiteListNames.size(): "+mWhiteListNames.size());
++					if (mWhiteListNames.size() == 0) {
++						return false;
++					}
++					else if (mWhiteListNames.size() == 1 && mWhiteListNames.get(0).equals("*")) {
++						return true;
++					}
++					else {
++						for (int i = 0; i < mWhiteListNames.size(); i++) {
++							if (packageName.startsWith(mWhiteListNames.get(i))) {
++								return true; 
++							}
++						}
++					}
++				}
++			}
++			catch (FileNotFoundException e) {
++				e.printStackTrace();
++			}
++		}
++		return false;
++	}
++
++	@Override
++	public int status() {
++		ArrayList<String> mPrefixs = new ArrayList<String>();
++		int state = -1;
++		if (mDefaultPath != null) {
++			File f = new File(mDefaultPath);
++			try {
++				mPrefixs = readFile(f);
++				if (mPrefixs == null) {
++					state = STATUS_ALL_FORBID;
++					Log.d(TAG, "you can not install all apk");
++				}
++				else if (mPrefixs.size() == 1 && mPrefixs.get(0).equals("*")) {
++					state = STATUS_ALL_ALLOW;
++					Log.d(TAG, "you can install all apk");
++				}
++				else {
++					state = STATUS_SPECIFIED;
++					Log.d(TAG, "you can install secified apk");
++				}
++			}
++			catch (IOException e) {
++				Log.e(TAG, e.toString());
++			}
++		}
++		return state;
++	}
++
++	/**
++	 * @param f
++	 * @return array list mAllPackageNames
++	 * @throws FileNotFoundException
++	 */
++	private ArrayList<String> readFile(File f) throws FileNotFoundException {
++		String mSinglePackageName = null;
++		ArrayList<String> mAllPackageNames = new ArrayList<String>();
++		FileReader fileReader = new FileReader(f);
++		BufferedReader bufferedReader = new BufferedReader(fileReader);
++		try {
++			while ((mSinglePackageName = bufferedReader.readLine().trim()) != null) {
++				if (!TextUtils.isEmpty(mSinglePackageName)) {
++					mAllPackageNames.add(mSinglePackageName);
++				}
++			}
++		}
++		catch (Exception e) {
++			e.printStackTrace();
++		}
++		finally {
++			try {
++				fileReader.close();
++				bufferedReader.close();
++			}
++			catch (Exception e2) {
++				Log.e(TAG, e2.toString());
++			}
++		}
++		return mAllPackageNames;
++	}
++}
++//kingberry.ws add for APPLICATION_INSTALL_WHITELIST -e
++
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+index 7c816ee..5a02ec3 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -2536,6 +2536,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+         exKeyTable[KeyEvent.KEYCODE_6].FuncIndex = 0;
+         exKeyTable[KeyEvent.KEYCODE_STAR].lastTickCount = 0L;
+         exKeyTable[KeyEvent.KEYCODE_STAR].Func[0] = KeyEvent.KEYCODE_PERIOD;
++        exKeyTable[KeyEvent.KEYCODE_STAR].Func[0] = KeyEvent.KEYCODE_GRAVE;
+         exKeyTable[KeyEvent.KEYCODE_STAR].FuncLen = 1;
+         exKeyTable[KeyEvent.KEYCODE_STAR].FuncIndex = 0;
+         exKeyTable[KeyEvent.KEYCODE_7].lastTickCount = 0L;
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/app/res/values-zh-rCN/strings.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/app/res/values-zh-rCN/strings.xml
+index c05c874..7d3157c 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/app/res/values-zh-rCN/strings.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/app/res/values-zh-rCN/strings.xml
+@@ -164,6 +164,8 @@
+     <string name="call_log_action_block_report_number" msgid="7302636538668696729">"屏蔽/举报骚扰电话号码"</string>
+     <string name="call_log_action_block_number" msgid="5048188386501998865">"屏蔽号码"</string>
+     <string name="call_log_action_remove_spam" msgid="2045319806318398403">"非骚扰电话号码"</string>
++    <string name="white_list_title">白名单配置</string>
++    <string name="white_password_error_hint">密码错误，请重新输入</string>
+     <string name="call_log_action_unblock_number" msgid="6100117033288448758">"取消屏蔽号码"</string>
+     <string name="spam_number_call_log_label" msgid="2678431398326811131">"骚扰电话号码"</string>
+     <string name="call_composer_connection_failed" msgid="6776461585447831242">"<xliff:g id="NAME">%1$s</xliff:g>不在线，无法接通"</string>
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/app/res/values/strings.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/app/res/values/strings.xml
+index 7332c31..e9fc0bf 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/app/res/values/strings.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/app/res/values/strings.xml
+@@ -686,6 +686,8 @@
+     They\'ll be stored anonymously. Change Settings any time.
+   </string>
+ 
++  <string name="white_list_title">App white list config</string>
++  <string name="white_password_error_hint">Password error,please input right password!</string>
+   <!-- Text for a 'learn more' link at the end of the voicemail donation promo dialog content -->
+   <string name="voicemail_donation_promo_learn_more">Learn&#160;more</string>
+ 
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/dialpadview/SpecialCharSequenceMgr.java b/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/dialpadview/SpecialCharSequenceMgr.java
+index 30ad284..ef73d91 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/dialpadview/SpecialCharSequenceMgr.java
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Dialer/java/com/android/dialer/dialpadview/SpecialCharSequenceMgr.java
+@@ -72,6 +72,15 @@ import java.util.List;
+ import java.util.Locale;
+ import android.content.ComponentName;
+ 
++//kingberry.zhengjinhua below for vendor whitelist entry
++import android.graphics.Color;
++import android.provider.Settings;
++import android.text.Editable;
++import android.text.InputType;
++import android.text.TextUtils;
++import android.text.method.PasswordTransformationMethod;
++import android.os.SystemProperties;
++
+ /**
+  * Helper class to listen for some magic character sequences that are handled specially by the
+  * dialer.
+@@ -91,6 +100,9 @@ public class SpecialCharSequenceMgr {
+   private static final String KINGBERRY_EM_DISPLAY = "*#0*#";
+   private static final String START_QUALCOMM_LOGKIT = "*#8378*#";
+   private static final String START_OTA_TEST = "*#8379*#";
++  
++  public static final String WHITE_LIST_DISPLAY = "*#22336*#";
++  public static final String WHITE_LIST_CONFIG = "*#22337*#";
+   /** ***** This code is used to handle SIM Contact queries ***** */
+   private static final String ADN_PHONE_NUMBER_COLUMN_NAME = "number";
+ 
+@@ -139,6 +151,8 @@ public class SpecialCharSequenceMgr {
+         || handleAdnEntry(context, dialString, textField)
+         || handleSamsungEngineerSoftVersion(context, dialString)
+         || handleStartQualcommLogkit(context, dialString)
++		|| handleAppWhiteList(context, dialString)
++        || handleAppWhiteListDisabledCfg(context, dialString)
+         || handleSecretCode(context, dialString)) {
+       return true;
+     }
+@@ -693,4 +707,125 @@ public class SpecialCharSequenceMgr {
+       cancelOperation(ADN_QUERY_TOKEN);
+     }
+   }
++  
++  
++  //kingberry.zhengjinhua below for vendor whitelist entry
++    static String mDefaultPassword = "111111";
++    static final String WHITE_LIST_PASSWORD = "white_list_password_code";
++   
++    static private void passwordCheck(Context context, EditText tmpEditText) {
++        if (tmpEditText == null) {
++            return;
++        }
++        
++        String password = Settings.System.getString(context.getContentResolver(), WHITE_LIST_PASSWORD);
++        if(password == null || "".endsWith(password)){
++            Settings.System.putString(context.getContentResolver(),WHITE_LIST_PASSWORD, mDefaultPassword);
++        }else{
++            mDefaultPassword = password; 
++        }
++        
++        Editable pwd = tmpEditText.getEditableText();
++        if (pwd != null && mDefaultPassword.equals(pwd.toString())) {
++            //add code here to entry config activity
++             Intent i = new Intent(Intent.ACTION_MAIN);
++            i.setComponent(new ComponentName("com.android.settings",
++                            "com.android.appwhitelist.AppWhiteListActivity"));
++            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++            i.putExtra("view_type", "whitelist");
++            context.startActivity(i);
++            
++        } else {
++            Toast.makeText(context,R.string.white_password_error_hint,
++                    Toast.LENGTH_SHORT).show();
++        }
++
++    }
++
++   static void handleWhiteListPermissionCheck(Context context){
++        final Context contxt = context;
++        EditText mEditTextPassword;
++        
++        mEditTextPassword = new EditText(context);
++        mEditTextPassword.setSingleLine();
++        mEditTextPassword.setTextSize(22);
++        //mEditTextPassword.setTextColor(Color.WHITE);
++        mEditTextPassword.setInputType(InputType.TYPE_CLASS_TEXT
++                | InputType.TYPE_CLASS_NUMBER |InputType.TYPE_TEXT_VARIATION_PASSWORD);
++        mEditTextPassword.setTransformationMethod(PasswordTransformationMethod.getInstance());
++        
++        AlertDialog.Builder mAlertDialogBuilder = new AlertDialog.Builder(
++                context);
++        mAlertDialogBuilder.setTitle(R.string.white_list_title).setView(
++                mEditTextPassword);
++        final EditText tmpEditText = mEditTextPassword;
++        
++        mAlertDialogBuilder.setPositiveButton(android.R.string.ok,
++                new DialogInterface.OnClickListener() {
++                    @Override
++                    public void onClick(DialogInterface dialog, int which) {
++                        passwordCheck(contxt, tmpEditText);
++                    }
++
++                }).setNegativeButton(android.R.string.cancel,
++                new DialogInterface.OnClickListener() {
++                    @Override
++                    public void onClick(DialogInterface dialog, int which) {
++                        //setResult(RESULT_CANCELED);
++                       // finish();
++                    }
++
++                });
++        mAlertDialogBuilder.create().show();
++    }
++//kingberry.end
++
++        static boolean handleAppWhiteList(Context context, String input) {
++             if (input.equals(WHITE_LIST_DISPLAY)) {
++                /*if(!FeatureOption.WHITE_LIST_SUPPORT){
++                      AlertDialog alert = new AlertDialog.Builder(context)
++                            .setTitle("Warning")
++                            .setMessage("Unsupport white list configs")
++                            .setPositiveButton(android.R.string.ok, null)
++                            .setCancelable(false).create();
++                    alert.show();
++                    return true;
++                }*/
++                handleWhiteListPermissionCheck(context);
++                /*
++                 Intent i = new Intent(Intent.ACTION_MAIN);
++                    i.setComponent(new ComponentName("com.android.settings",
++                                    "com.android.appwhitelist.AppWhiteListSwitchActivity"));
++                    i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++                    i.putExtra("view_type", "whitelist");
++                    context.startActivity(i);
++                 */
++                 return true;
++             }
++             return false;
++         }
++
++        static boolean handleAppWhiteListDisabledCfg(Context context, String input) {
++             if (input.equals(WHITE_LIST_CONFIG)) {
++                /*if(!FeatureOption.WHITE_LIST_SUPPORT){
++                      AlertDialog alert = new AlertDialog.Builder(context)
++                            .setTitle("Warning")
++                            .setMessage("Unsupport white list configs")
++                            .setPositiveButton(android.R.string.ok, null)
++                            .setCancelable(false).create();
++                    alert.show();
++                    return true;
++                }*/
++                 Intent i = new Intent(Intent.ACTION_MAIN);
++                    i.setComponent(new ComponentName("com.android.settings",
++                                    "com.android.appwhitelist.AppWhiteListSwitchActivity"));
++                    i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++                    i.putExtra("view_type", "whitelist");
++                    context.startActivity(i);
++                 return true;
++             }
++             return false;
++         }
++
++    //kingberry.end
+ }
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/AndroidManifest.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/AndroidManifest.xml
+index f8aa2ea..f7a071b 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/AndroidManifest.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/AndroidManifest.xml
+@@ -3344,6 +3344,52 @@
+                 <action android:name="android.intent.action.MAIN" />
+             </intent-filter>
+         </activity>
++	
++	
++	<!-- application white list configuration -->
++         <activity android:name="com.android.appwhitelist.AppWhiteListActivity"
++                android:label="@string/white_list_title"
++                android:theme="@android:style/Theme.Light"
++                android:screenOrientation="portrait"
++                android:clearTaskOnLaunch="true" >
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++         <activity android:name="com.android.appwhitelist.AppWhiteListSwitchActivity"
++                android:label="@string/white_list_title"
++                android:theme="@android:style/Theme.Light"
++                android:screenOrientation="portrait"
++                android:clearTaskOnLaunch="true" >
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </activity>
++
++       <!-- kingberry.wangsong  add for factory test start   A13_FACTROY_TEST -->
++        <activity
++            android:name="com.android.settings.deviceinfo.ActivityFunctiontest"
++            android:label="@string/idata_test_funtion" >
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++            </intent-filter>
++        </activity>
++        
++        <activity
++            android:name="com.android.settings.deviceinfo.ActivityFunctiontestItem"
++            android:label="@string/idata_test_funtionItem" >
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++            </intent-filter>
++        </activity>
++     <!-- kingberry.wangsong  add for factory test start   A13_FACTROY_TEST -->
++	
++	
++	
++	
++	
+ 
+         <provider android:name=".slices.SettingsSliceProvider"
+                   android:authorities="com.android.settings.slices;android.settings.slices"
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_app_white_list.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_app_white_list.xml
+new file mode 100644
+index 0000000..31e93ed
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_app_white_list.xml
+@@ -0,0 +1,70 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical" >
++
++    <RadioGroup
++        android:id="@+id/white_radiogroup"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="vertical" >
++
++        <RadioButton
++            android:id="@+id/white_radio_disabled"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/white_disabled_all" />
++
++        <RadioButton
++            android:id="@+id/white_radio_enabled"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/white_enabled_all" />
++
++        <RadioButton
++            android:id="@+id/white_radio_custom"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/white_custom_define" />
++    </RadioGroup>
++
++    <EditText
++        android:id="@+id/white_file_info"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="20dp"
++        android:gravity="top|left"
++        android:inputType="text|textMultiLine"
++        android:minHeight="150dp"
++        android:scrollbars="vertical"
++        android:singleLine="false" />
++
++    <Space
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_weight="1" />
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_gravity="bottom"
++        android:layout_marginBottom="10dp"
++        android:orientation="horizontal" >
++
++        <Button
++            android:id="@+id/change_password"
++            android:layout_width="match_parent"
++            android:layout_height="60dp"
++            android:layout_weight="1"
++            android:text="@string/white_change_password_title" />
++
++        <Button
++            android:id="@+id/update_config"
++            android:layout_width="match_parent"
++            android:layout_height="60dp"
++            android:layout_weight="1"
++            android:text="@string/white_update_config" />
++    </LinearLayout>
++
++</LinearLayout>
+\ No newline at end of file
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_app_white_list_cfg.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_app_white_list_cfg.xml
+new file mode 100644
+index 0000000..3b3c005
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_app_white_list_cfg.xml
+@@ -0,0 +1,40 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical" >
++
++    <RadioGroup
++        android:id="@+id/white_radiogroup"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="vertical" >
++
++        <RadioButton
++            android:id="@+id/white_radio_disabled"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/white_disabled" />
++
++        <RadioButton
++            android:id="@+id/white_radio_enabled"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:text="@string/white_enabled" />
++
++    </RadioGroup>
++
++    <Space
++        android:layout_width="match_parent"
++        android:layout_height="0dp"
++        android:layout_weight="1" />
++
++    <Button
++        android:id="@+id/update_config"
++        android:layout_width="match_parent"
++        android:layout_height="60dp"
++        android:layout_gravity="bottom"
++        android:layout_marginBottom="10dp"
++        android:text="@string/white_update_config" />
++
++</LinearLayout>
+\ No newline at end of file
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_functiontest.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_functiontest.xml
+new file mode 100644
+index 0000000..ccb23b9
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/activity_functiontest.xml
+@@ -0,0 +1,51 @@
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:tools="http://schemas.android.com/tools"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:gravity="center_horizontal">
++
++    <TextView
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:textSize="22sp"
++        android:gravity="center"
++        android:layout_marginTop = "20dp"
++        android:text="@string/idata_testfuntion_title" />
++    
++
++     <EditText 
++         android:id="@+id/password"
++         android:layout_width="260dp"
++         android:layout_height="wrap_content"
++         android:paddingTop="20dp"
++         android:password="true"
++         android:textSize="24sp"/>
++     
++     <LinearLayout 
++         android:layout_width="match_parent"
++         android:layout_height="wrap_content"
++         android:paddingTop="20dp"
++         android:orientation="horizontal">
++      
++      <Button android:id="@+id/Cancel"  
++        android:layout_width="100dp"  
++        android:layout_height="64dp"  
++        android:layout_marginLeft="64dp"
++        android:text="@string/idata_testfuntion_cancel" />  
++       
++     <LinearLayout 
++         android:layout_width="wrap_content"
++         android:layout_height="wrap_content"
++         android:layout_weight="1.0">
++     </LinearLayout> 
++     
++      <Button android:id="@+id/Comfirm"  
++        android:layout_width="100dp"  
++        android:layout_height="64dp" 
++        android:layout_marginRight="64dp" 
++        android:text="@string/idata_testfuntion_comfirm" />
++           
++     </LinearLayout>
++     
++</LinearLayout>
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/app_white_list_change_password.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/app_white_list_change_password.xml
+new file mode 100644
+index 0000000..b12e6d1
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/app_white_list_change_password.xml
+@@ -0,0 +1,55 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:orientation="vertical"
++    android:padding="20dp" >
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="5dp"
++        android:text="@string/white_change_password_old"
++        android:textColor="@android:color/white"
++        android:textSize="18sp" />
++
++    <EditText
++        android:id="@+id/password_old"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:inputType="text|textPassword|number"
++        android:password="true"
++        android:singleLine="true" />
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="15dp"
++        android:text="@string/white_change_password_new"
++        android:textColor="@android:color/white"
++        android:textSize="18sp" />
++
++    <EditText
++        android:id="@+id/password_new_1"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:inputType="text|textPassword|number"
++        android:password="true"
++        android:singleLine="true" />
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:text="@string/white_change_password_new_2"
++        android:textColor="@android:color/white"
++        android:textSize="18sp" />
++
++    <EditText
++        android:id="@+id/password_new_2"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:inputType="text|textPassword|number"
++        android:password="true"
++        android:singleLine="true" />
++
++</LinearLayout>
+\ No newline at end of file
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/password_dialog.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/password_dialog.xml
+new file mode 100644
+index 0000000..018268e
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/layout/password_dialog.xml
+@@ -0,0 +1,41 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- Copyright (C) 2008 The Android Open Source Project
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++  
++          http://www.apache.org/licenses/LICENSE-2.0
++  
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++
++<!--
++
++  Defines the layout of the splash screen that displays the security
++  settings required for an application and requests the confirmation of the
++  user before it is installed.
++-->
++<!--kingberry.add Password_install-->
++<LinearLayout
++        xmlns:android="http://schemas.android.com/apk/res/android"
++        android:orientation="vertical"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:paddingTop="25dip"
++        android:paddingBottom="25dip"
++        android:paddingLeft="8dip"
++        android:paddingRight="8dip">
++
++       <EditText android:id="@+id/password"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:textSize = "20sp"
++                android:singleLine="true"
++                android:password="true"
++                android:maxLength="63" />
++</LinearLayout>
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values-zh-rCN/strings.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values-zh-rCN/strings.xml
+index cfc4e68..1887afa 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values-zh-rCN/strings.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values-zh-rCN/strings.xml
+@@ -3860,6 +3860,37 @@
+     <string name="choose_spell_checker" msgid="6596539862291699367">"选择拼写检查工具"</string>
+     <string name="spell_checker_master_switch_title" msgid="8763132750954344372">"使用拼写检查工具"</string>
+     <string name="spell_checker_not_selected" msgid="8871083796179200696">"未选择"</string>
++
++    <string name="white_list_title">白名单配置</string>
++    <string name="white_disabled_all">禁止所有程序</string>
++    <string name="white_enabled_all">允许所有程序</string>
++    <string name="white_enabled">打开白名单功能</string>
++    <string name="white_disabled">关闭白名单功能</string>
++    <string name="white_custom_define">自定义允许安装包名</string>
++    <string name="white_update_config">更新配置</string>
++    <string name="white_password_error_hint">密码错误，请重新输入</string>
++    <string name="white_change_password_title">修改密码</string>
++    <string name="white_change_password_old">旧密码</string>
++    <string name="white_change_password_new">新密码</string>
++    <string name="white_change_password_new_2">请再输入一次新密码</string>
++    <string name="white_change_password_finish">已修改</string>
++    <string name="white_change_password_error1">旧密码错误</string>
++    <string name="white_change_password_error2">新密码输入错误</string>
++
++    <string name="idata_test_funtionItem">功能测试</string>
++    <string name="idata_test_funtion_summary">点击菜单，以启动功能测试</string> 
++    <string name="idata_test_funtion">功能测试</string>
++    <string name="idata_testfuntion_title">请输入 6 位密码</string>
++    <string name="idata_testfuntion_cancel">取消</string>
++    <string name="idata_testfuntion_comfirm">确定</string>
++    <string name="idata_password_dialog_title">密码错误</string>
++    <string name="idata_password_dialog_message">密码错误，请重试。</string>
++    <string name="setting_test_engineer_mode">工程模式</string>
++    <string name="setting_test_factory_test">工厂测试</string>
++    <string name="idata_password_dialog_Positive">确定</string>
++    <string name="setting_white_list_config">白名单配置</string>
++
++
+     <string name="notification_log_no_title" msgid="5678029849672024215">"（无）"</string>
+     <string name="notification_log_details_delimiter" msgid="3116559361552416747">"： "</string>
+     <string name="notification_log_details_package" msgid="2596495677039100284">"pkg"</string>
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values/strings.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values/strings.xml
+index d54b648..4aeab3e 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values/strings.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values/strings.xml
+@@ -24,7 +24,10 @@
+     <string name="allow">Allow</string>
+     <!-- Strings for Dialog deny button -->
+     <string name="deny">Deny</string>
+-
++    <string name="setting_monkey_test">Monkey测试</string>
++    <string name="setting_test_start_pos_demo">打开PosDemo</string>
++    <string name="setting_test_start_camera">打开相机</string>
++    <string name="setting_test_start_mtklog">打开MTKLog</string>
+     <!-- Strings for Dialog close button [CHAR LIMIT=20] -->
+     <string name="dlg_close">Close</string>
+     <!-- Strings for Dialog switch button [CHAR LIMIT=20] -->
+@@ -9998,6 +10001,46 @@
+ 
+     <!-- Slices Strings -->
+ 
++   <string name="white_list_title">App white list config</string>
++   <string name="white_disabled_all">Disabled All App</string>
++   <string name="white_enabled_all">Enabled All App</string>
++   <string name="white_custom_define">Custom defined</string>
++   <string name="white_update_config">Update Configuration</string>
++   <string name="white_password_error_hint">Password error,please input right password!</string>
++   <string name="white_enabled">Enabled WhiteList</string>
++   <string name="white_disabled">Disabled WhiteList</string>
++   <string name="white_change_password_title">Change password</string>
++   <string name="white_change_password_old">Old password</string>
++   <string name="white_change_password_new">New password</string>
++   <string name="white_change_password_new_2">Please input new password again</string>
++   <string name="white_change_password_finish">finish</string>
++   <string name="white_change_password_error1">Old password error</string>
++   <string name="white_change_password_error2">New password error</string>
++   <string name="setting_test_factory_test">Factory Test</string>
++   <string name="setting_test_scanner_test">Scanner Test</string>
++   <string name="setting_test_imei_check">IMEI Check</string>
++   <string name="setting_test_touch_calibration">Touch Calibration</string>
++   <string name="setting_test_engineer_mode">Engineer Mode</string>
++   <string name="setting_white_list_config">WhiteList Config</string>
++
++    <string name="idata_test_funtion_summary">click to start the function test</string> 
++    <string name="idata_test_funtion">Function Test</string>
++    <string name="idata_testfuntion_title">Please enter the six password!</string>
++    <string name="idata_testfuntion_cancel">Cancel</string>
++    <string name="idata_testfuntion_comfirm">Comfirm</string>
++    <string name="idata_password_dialog_title">Wrong password</string>
++    <string name="idata_password_dialog_message">Wrong password,please try again.</string>
++    <string name="idata_password_dialog_Positive">Comfirm</string>
++    <string name="idata_test_funtionItem">Function Test</string>
++    <string name="idata_imei_invalid">Invalid imei</string>
++    <string name="idata_imei_title">IMEI</string>
++    <string name="idata_install_on">enable install application</string>
++    <string name="idata_install_off">inhibit install application</string>
++    <string name="idata_password_error_title">Error</string>
++    <string name="idata_password_error_msg">Password is incorrect, please try again!</string>
++    <string name="idata_password_Median_error">Please enter a six password！</string>
++    <string name="idata_password_char_error">Password is not a letter! </string>
++
+     <!-- Summary text on a card explaining that a setting does not exist / is not supported on the device [CHAR_LIMIT=NONE]-->
+     <string name="unsupported_setting_summary" product="default">Setting isn’t supported on this device</string>
+ 
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/xml/device_info_settings.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/xml/device_info_settings.xml
+index 8aa4d06..8e652d7 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/xml/device_info_settings.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/xml/device_info_settings.xml
+@@ -136,4 +136,11 @@
+         android:summary="@string/summary_placeholder"
+         settings:allowDividerAbove="true"/>
+ 
+-</PreferenceScreen>
+\ No newline at end of file
++    <!--kingberry.wansong Settings add factory test  A13_FACTORY_TEST  -->
++    <Preference android:key="idata_testmenu" 
++        style="?android:preferenceInformationStyle"
++        android:order="44"
++        android:title="@string/idata_test_funtion"
++        android:summary="@string/idata_test_funtion_summary"/>
++
++</PreferenceScreen>
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/appwhitelist/AppWhiteListActivity.java b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/appwhitelist/AppWhiteListActivity.java
+new file mode 100644
+index 0000000..b4c07b0
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/appwhitelist/AppWhiteListActivity.java
+@@ -0,0 +1,370 @@
++package com.android.appwhitelist;
++
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileNotFoundException;
++import java.io.FileReader;
++import java.io.FileWriter;
++import java.io.IOException;
++import java.util.ArrayList;
++
++import com.android.settings.R;
++
++
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.graphics.Color;
++import android.os.Bundle;
++import android.preference.PreferenceActivity;
++import android.provider.Settings;
++import android.text.Editable;
++import android.text.InputType;
++import android.text.TextUtils;
++import android.text.method.PasswordTransformationMethod;
++import android.util.Log;
++import android.view.Menu;
++import android.view.MenuInflater;
++import android.view.MenuItem;
++import android.view.View;
++import android.widget.Button;
++import android.widget.EditText;
++import android.widget.RadioButton;
++import android.widget.RadioGroup;
++import android.widget.Toast;
++
++public class AppWhiteListActivity extends Activity {
++    public static final String TAG = "AppWhiteListActivity";
++    public static final String mDefaultPath = "/data/apkins/package_ins_cfg";
++    public static final String WHITE_LIST_PASSWORD = "white_list_password_code";
++    
++    public static final String DEFAULT_PASSWORD = "111111";
++
++    String mDefaultPassword = DEFAULT_PASSWORD;
++    
++    RadioGroup mRadioGroup;
++    RadioButton mRadioButtonDisabled;
++    RadioButton mRadioButtonEnabled;
++    RadioButton mRadioButtonCustom;
++    EditText mEditText;
++    EditText mEditTextPassword = null;
++    Button mButton;
++    Button mButtonChangePassword;
++
++    String mDefaultFileContext = null;
++    boolean canWrite = false;
++    Context mContext;
++
++/* move to button in screen.
++    @Override
++    public boolean onCreateOptionsMenu(Menu menu) {
++        // Inflate the menu; this adds items to the action bar if it is present.
++        getMenuInflater().inflate(R.menu.app_whitelist_menu, menu);
++        return true;
++    }
++ 
++
++    @Override
++    public boolean onPrepareOptionsMenu(Menu menu) {
++        final MenuItem pwd = menu.findItem(R.id.white_list_password_id);
++        pwd.setVisible(true);
++        return true;
++    }
++ */   
++    View mChangePasswordDialog = null;
++    
++    boolean changePasswordCheck() {
++        boolean ret = false;
++        if (mChangePasswordDialog == null) {
++            return false;
++        }
++        CharSequence notText = getText(R.string.wifi_error);
++        do {
++            EditText old = (EditText)mChangePasswordDialog.findViewById(R.id.password_old);
++            EditText new1 = (EditText)mChangePasswordDialog.findViewById(R.id.password_new_1);
++            EditText new2 = (EditText)mChangePasswordDialog.findViewById(R.id.password_new_2);
++            try {
++                if (!mDefaultPassword.equals(old.getEditableText().toString())) {
++                    notText = getText(R.string.white_change_password_error1);
++                    break;
++                }
++                String s1 = new1.getEditableText().toString();
++                String s2 = new2.getEditableText().toString();
++                if (s1 == null || s2 == null || "".equals(s1) || "".equals(s2) ||
++                        !s1.equals(s2)) {
++                    notText = getText(R.string.white_change_password_error2);
++                }else{
++                    mDefaultPassword = s1;
++                    notText = getText(R.string.white_change_password_finish);
++                    ret =  true;
++                    break;
++                }
++                
++            } catch (Exception e) {
++                return false;
++            }
++        } while (false);
++
++        Toast.makeText(mContext, notText, Toast.LENGTH_SHORT).show();
++        return ret;
++    }
++    
++    public void showChangePasswordDialog(){
++        mChangePasswordDialog = getLayoutInflater().inflate(R.layout.app_white_list_change_password, null);
++        AlertDialog.Builder mAlertDialogBuilder = new AlertDialog.Builder(mContext);
++        mAlertDialogBuilder.setTitle(R.string.white_change_password_title).setView( mChangePasswordDialog);
++        mAlertDialogBuilder.setPositiveButton(android.R.string.ok,
++                new DialogInterface.OnClickListener() {
++                    @Override
++                    public void onClick(DialogInterface dialog, int which) {
++                        if(changePasswordCheck()){
++                            Settings.System.putString(getContentResolver(),WHITE_LIST_PASSWORD, mDefaultPassword);
++                        }
++                    }
++
++                }).setNegativeButton(android.R.string.cancel,
++                new DialogInterface.OnClickListener() {
++                    @Override
++                    public void onClick(DialogInterface dialog, int which) {
++                        //setResult(RESULT_CANCELED);
++                       // finish();
++                    }
++
++                });
++        mAlertDialogBuilder.create().show();
++    }
++
++/*
++    @Override
++    public boolean onOptionsItemSelected(MenuItem item) {
++        switch (item.getItemId()) {
++            case R.id.white_list_password_id:
++                showChangePasswordDialog();
++                return true;
++        }
++        return super.onOptionsItemSelected(item);
++    }
++*/
++    
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.activity_app_white_list);
++
++        mContext = this;
++        mRadioGroup = (RadioGroup) findViewById(R.id.white_radiogroup);
++        mRadioGroup.setOnCheckedChangeListener(mOnCheckedChangeListener);
++        mRadioButtonDisabled = (RadioButton) findViewById(R.id.white_radio_disabled);
++        mRadioButtonEnabled = (RadioButton) findViewById(R.id.white_radio_enabled);
++        mRadioButtonCustom = (RadioButton) findViewById(R.id.white_radio_custom);
++        mEditText = (EditText) findViewById(R.id.white_file_info);
++        mButtonChangePassword = (Button) findViewById(R.id.change_password);
++        mButtonChangePassword.setOnClickListener(mOnChangePasswordClickListener);
++        mButton = (Button) findViewById(R.id.update_config);
++        //mButton.setOnClickListener(mOnClickListener);
++        mButton.setOnClickListener(mOnClickListenerDirectory);
++
++        Intent it = getIntent();
++        if (it != null) {
++            String s = it.getExtras().getString("view_type");
++            if (s != null && "whitelist".equals(s)) {
++                canWrite = true;
++            }
++        }
++        
++        String password = Settings.System.getString(mContext.getContentResolver(), WHITE_LIST_PASSWORD);
++        if(password == null || "".endsWith(password)){
++            Settings.System.putString(getContentResolver(),WHITE_LIST_PASSWORD, mDefaultPassword);
++        }else{
++            mDefaultPassword = password; 
++        }
++
++        File dir = new File("/data/apkins/");
++        if (!dir.exists()) {
++            dir.mkdir();
++            mRadioGroup.check(R.id.white_radio_disabled);
++            mEditText.setEnabled(false);
++        }
++        Log.i(TAG,
++                "onCreate--check directory:/data/apkins/ exist = "
++                        + dir.exists());
++        File f = new File(mDefaultPath);
++        if (!f.exists()) {
++            mRadioGroup.check(R.id.white_radio_disabled);
++            mEditText.setEnabled(false);
++            try {
++                f.createNewFile();
++            } catch (IOException e) {
++                // TODO Auto-generated catch block
++                e.printStackTrace();
++            }
++        } else {
++            // file exist. read context
++            ArrayList<String> packageList = readFile();
++            if (packageList.size() < 1) {
++                mRadioGroup.check(R.id.white_radio_disabled);
++            } else if (packageList.size() == 1
++                    && "*".endsWith(packageList.get(0))) {
++                mRadioGroup.check(R.id.white_radio_enabled);
++                mEditText.setEnabled(false);
++            } else {
++                StringBuilder sb = new StringBuilder();
++                for (int i = 0; i < packageList.size(); i++) {
++                    sb.append(packageList.get(i)).append("\r\n");
++                }
++                mDefaultFileContext = sb.toString();
++                mRadioGroup.check(R.id.white_radio_custom);
++                mEditText.setText(mDefaultFileContext);
++                mEditText.setEnabled(true);
++            }
++        }
++        Log.i(TAG, "onCreate--check file package_ins_cfg exist = " + f.exists());
++
++    }
++    private Button.OnClickListener mOnClickListenerDirectory = new Button.OnClickListener() {
++
++        @Override
++        public void onClick(View v) {
++            writeConfig();
++            Toast.makeText(mContext,R.string.white_change_password_finish,
++                    Toast.LENGTH_SHORT).show();
++        }
++        
++    };
++
++    private Button.OnClickListener mOnChangePasswordClickListener = new Button.OnClickListener() {
++
++        @Override
++        public void onClick(View v) {
++            showChangePasswordDialog();
++        }
++        
++    };
++    
++    private Button.OnClickListener mOnClickListener = new Button.OnClickListener() {
++
++        @Override
++        public void onClick(View v) {
++            mEditTextPassword = new EditText(mContext);
++            mEditTextPassword.setSingleLine();
++            mEditTextPassword.setTextSize(26);
++            mEditTextPassword.setTextColor(Color.WHITE);
++            mEditTextPassword.setInputType(InputType.TYPE_CLASS_TEXT
++                    | InputType.TYPE_CLASS_NUMBER |InputType.TYPE_TEXT_VARIATION_PASSWORD);
++            mEditTextPassword.setTransformationMethod(PasswordTransformationMethod.getInstance());
++            AlertDialog.Builder mAlertDialogBuilder = new AlertDialog.Builder(
++                    mContext);
++            mAlertDialogBuilder.setTitle(R.string.white_list_title).setView(
++                    mEditTextPassword);
++            mAlertDialogBuilder.setPositiveButton(android.R.string.ok,
++                    new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialog, int which) {
++                            passwordCheck();
++
++                        }
++
++                    }).setNegativeButton(android.R.string.cancel,
++                    new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialog, int which) {
++                            //setResult(RESULT_CANCELED);
++                           // finish();
++                        }
++
++                    });
++            mAlertDialogBuilder.create().show();
++        }
++
++    };
++
++    private void passwordCheck() {
++        if (mEditTextPassword == null) {
++            return;
++        }
++        Editable pwd = mEditTextPassword.getEditableText();
++        if (pwd != null && mDefaultPassword.equals(pwd.toString())) {
++            writeConfig();
++            Toast.makeText(mContext,R.string.white_change_password_finish,
++                    Toast.LENGTH_SHORT).show();
++        } else {
++            Toast.makeText(mContext,R.string.white_password_error_hint,
++                    Toast.LENGTH_SHORT).show();
++        }
++
++    }
++
++    private void writeConfig() {
++        if (!canWrite) {
++            return;
++        }
++        File f = new File(mDefaultPath);
++        if (!f.canWrite()) {
++            Log.i(TAG, "writeConfig---file cannot be written!!");
++        }
++        try {
++
++            FileWriter fileWriter = new FileWriter(f);
++            String s = mEditText.getEditableText().toString();
++            Log.i(TAG, "writeConfig---file context:" + s);
++            fileWriter.write(s);
++            fileWriter.close();
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
++    }
++
++    RadioGroup.OnCheckedChangeListener mOnCheckedChangeListener = new RadioGroup.OnCheckedChangeListener() {
++
++        @Override
++        public void onCheckedChanged(RadioGroup group, int checkedId) {
++            // TODO Auto-generated method stub
++            if (checkedId == mRadioButtonDisabled.getId()) {
++                mEditText.setText("");
++                mEditText.setEnabled(false);
++            }
++            if (checkedId == mRadioButtonEnabled.getId()) {
++                mEditText.setText("*");
++                mEditText.setEnabled(false);
++            }
++            if (checkedId == mRadioButtonCustom.getId()) {
++                mEditText.setEnabled(true);
++                mEditText.setText(mDefaultFileContext);
++            }
++
++        }
++
++    };
++
++    private ArrayList<String> readFile() {
++        ArrayList<String> mAllPackageNames = new ArrayList<String>();
++
++        File f = new File(mDefaultPath);
++        try {
++            FileReader fileReader = new FileReader(f);
++            try {
++
++            } catch (Exception e) {
++                // TODO: handle exception
++            }
++            BufferedReader bufferedReader = new BufferedReader(fileReader);
++
++            String Textline = null;
++            while ((Textline = bufferedReader.readLine()) != null) {
++                String s = Textline.trim();
++                if (!TextUtils.isEmpty(s)) {
++                    mAllPackageNames.add(s);
++                }
++            }
++            bufferedReader.close();
++            fileReader.close();
++        } catch (Exception e) {
++            e.printStackTrace();
++            Log.e(TAG, e.getMessage());
++        }
++        return mAllPackageNames;
++    }
++
++}
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/appwhitelist/AppWhiteListSwitchActivity.java b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/appwhitelist/AppWhiteListSwitchActivity.java
+new file mode 100644
+index 0000000..63abff0
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/appwhitelist/AppWhiteListSwitchActivity.java
+@@ -0,0 +1,283 @@
++package com.android.appwhitelist;
++
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.FileWriter;
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.io.OutputStreamWriter;
++import java.util.HashMap;
++import java.util.Map;
++
++import com.android.settings.R;
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.os.Bundle;
++import android.provider.Settings;
++import android.text.Editable;
++import android.text.InputType;
++import android.util.Log;
++import android.view.View;
++import android.widget.Button;
++import android.widget.EditText;
++import android.widget.RadioButton;
++import android.widget.RadioGroup;
++import android.widget.Toast;
++import android.provider.Settings;
++
++public class AppWhiteListSwitchActivity extends Activity {
++    public static final String TAG = "AppWhiteListSwitchActivity";
++    public static final String mDefaultPath = "/data/apkins/cfg";
++
++    String mDefaultPassword = AppWhiteListActivity.DEFAULT_PASSWORD;
++	public static final String APP_WHITE_LIST_ENABLE = "EXTRA_WHITE_LIST_ENABLE";
++    
++    boolean canWrite = false;
++    Context mContext;
++    
++    RadioGroup mRadioGroup;
++    RadioButton mRadioButtonDisabled;
++    RadioButton mRadioButtonEnabled;
++    EditText mEditTextPassword = null;
++    Button mButton;
++    boolean mDisabledFlag;
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        // TODO Auto-generated method stub
++        super.onCreate(savedInstanceState);
++        setContentView(R.layout.activity_app_white_list_cfg);
++
++        mContext = this;
++        mRadioGroup = (RadioGroup) findViewById(R.id.white_radiogroup);
++        mRadioGroup.setOnCheckedChangeListener(mOnCheckedChangeListener);
++        mRadioButtonDisabled = (RadioButton) findViewById(R.id.white_radio_disabled);
++        mRadioButtonEnabled = (RadioButton) findViewById(R.id.white_radio_enabled);
++        mButton = (Button) findViewById(R.id.update_config);
++        mButton.setOnClickListener(mOnClickListener);
++
++        String password = Settings.System.getString(mContext.getContentResolver(), AppWhiteListActivity.WHITE_LIST_PASSWORD);
++        if(password == null || "".endsWith(password)){
++            Settings.System.putString(getContentResolver(),"white_list_password_code", mDefaultPassword);
++        }else{
++            mDefaultPassword = password; 
++        }
++        
++        Intent it = getIntent();
++        if (it != null) {
++            String s = it.getExtras().getString("view_type");
++            if (s != null && "whitelist".equals(s)) {
++                canWrite = true;
++            }
++        }
++        /*File f = new File(mDefaultPath);
++        if (!f.exists()) {
++            mRadioGroup.check(R.id.white_radio_enabled);
++        }else{
++             mDisabledFlag = readDisabledCfg();
++            if(mDisabledFlag){
++                mRadioGroup.check(R.id.white_radio_disabled);
++            }else{
++            mRadioGroup.check(R.id.white_radio_enabled);
++            }
++            Log.i(TAG, "onCreate--readDisabledCfg flag = " + mDisabledFlag);
++        }*/
++		 boolean mCodeTag = getAPPWhiteListState();
++		if(mCodeTag){
++			mRadioGroup.check(R.id.white_radio_enabled);
++		}else{
++			 mRadioGroup.check(R.id.white_radio_disabled);
++		}
++        
++        ///
++        //kingberry.zhengjinhua
++       /* try { boolean
++            mCodeTag = !readDisabledCfg();
++        } catch (Exception e) {
++            e.printStackTrace();
++        }*/
++    //kingberry.zhengjinhua end
++
++        
++        
++        //////////////////////
++    }
++
++    private Button.OnClickListener mOnClickListener = new Button.OnClickListener() {
++
++        @Override
++        public void onClick(View v) {
++            mEditTextPassword = new EditText(mContext);
++            mEditTextPassword.setSingleLine();
++            mEditTextPassword.setInputType(InputType.TYPE_CLASS_TEXT
++                    | InputType.TYPE_CLASS_NUMBER);
++            mEditTextPassword.setInputType(InputType.TYPE_TEXT_VARIATION_PASSWORD);
++            AlertDialog.Builder mAlertDialogBuilder = new AlertDialog.Builder(
++                    mContext);
++            mAlertDialogBuilder.setTitle(R.string.white_list_title).setView(
++                    mEditTextPassword);
++            mAlertDialogBuilder.setPositiveButton(android.R.string.ok,
++                    new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialog, int which) {
++                            passwordCheck();
++                        }
++
++                    }).setNegativeButton(android.R.string.cancel,
++                    new DialogInterface.OnClickListener() {
++                        @Override
++                        public void onClick(DialogInterface dialog, int which) {
++                            //setResult(RESULT_CANCELED);
++                           // finish();
++                        }
++                    });
++            mAlertDialogBuilder.create().show();
++        }
++
++    };
++
++    private void passwordCheck() {
++        if (mEditTextPassword == null) {
++            return;
++        }
++        if (!canWrite) {
++            return;
++        }
++        Editable pwd = mEditTextPassword.getEditableText();
++        if (pwd != null && mDefaultPassword.equals(pwd.toString())) {
++			setAPPWhiteListEnable(mDisabledFlag);
++            //writeDisabledCfg(mDisabledFlag);
++            Toast.makeText(mContext,R.string.white_change_password_finish,
++                    Toast.LENGTH_SHORT).show();
++        } else {
++            Toast.makeText(mContext,R.string.white_password_error_hint,
++                    Toast.LENGTH_SHORT).show();
++        }
++    }
++    
++    RadioGroup.OnCheckedChangeListener mOnCheckedChangeListener = new RadioGroup.OnCheckedChangeListener() {
++
++        @Override
++        public void onCheckedChanged(RadioGroup group, int checkedId) {
++            // TODO Auto-generated method stub
++            if (checkedId == mRadioButtonDisabled.getId()) {
++                mDisabledFlag = false;
++            }
++            if (checkedId == mRadioButtonEnabled.getId()) {
++                mDisabledFlag = true;
++            }
++        }
++    };
++    /**
++     * chmod mode path: eg : chmod 777 /data/apkins/cfg
++     * 
++     * @param path
++     * @param mode
++     */
++    private static void chmod(String path, String mode) {
++        try {
++            String str1 = "chmod " + mode + " " + path;
++            Process localProcess = Runtime.getRuntime().exec(str1);
++            return;
++        } catch (IOException e) {
++            Log.i(TAG, "chmod fail: path = " + path + ", mode = " + mode);
++            Log.i(TAG, "exception : " + e.getMessage());
++        }
++    }
++
++    public static final int mKey = 997;
++    public static final int mKey2 = 97;
++
++    /**
++     * @param s
++     *            value = 12345(enabled) / 54321(disabled)
++     * @return
++     */
++    private int encrypt(int s) {
++        return (s + mKey) * mKey2;
++    }
++
++    private int decrypt(int s) {
++        return s / mKey2 - mKey;
++    }
++
++    /**
++     * @param cfg
++     *            = true mean close white list
++     * @return
++     */
++    public int writeDisabledCfg(boolean cfg) {
++		
++		
++        File f = new File(mDefaultPath);
++        if (!f.exists()) {
++            if(!cfg){
++                return 0;
++            }
++            try {
++                f.createNewFile();
++            } catch (IOException e) {
++                // TODO Auto-generated catch block
++                e.printStackTrace();
++            }
++        }
++        chmod(mDefaultPath, "0700");
++        String str = cfg ? String.valueOf(encrypt(54321)) : String
++                .valueOf(encrypt(12345));
++        try {
++            FileOutputStream fos = new FileOutputStream(f);
++            OutputStreamWriter writer = new OutputStreamWriter(fos);
++            writer.write(str);
++            writer.flush();
++            writer.close();
++
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++        return 0;
++    }
++	
++    public int setAPPWhiteListEnable(boolean enable) {
++        boolean ret = false;
++        ret = Settings.System.putInt(mContext.getContentResolver(),
++                APP_WHITE_LIST_ENABLE, enable ? 1 : 0);
++        return ret ? 1 : 0;
++    }
++	
++	
++	public boolean  getAPPWhiteListState() {
++        return Settings.System.getInt(mContext.getContentResolver(),
++                APP_WHITE_LIST_ENABLE, 0)==0?false:true;
++    }
++    /**
++     * @return = true means close white list, false means open white list
++     *         function
++     */
++    public boolean readDisabledCfg() {
++        File f = new File(mDefaultPath);
++        if (!f.exists()) {
++            return false;
++        }
++        try {
++            FileInputStream fis = new FileInputStream(f);
++            InputStreamReader reader = new InputStreamReader(fis);
++            char[] buf = new char[100];
++            int len = reader.read(buf);
++            if (len > 0) {
++                String s = String.valueOf(buf, 0, len);
++                Integer teg = Integer.parseInt(s);
++                if (decrypt(teg.intValue()) == 54321) {
++                    return true;
++                }
++            }
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
++        return false;
++    }
++
++}
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/deviceinfo/ActivityFunctiontest.java b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/deviceinfo/ActivityFunctiontest.java
+new file mode 100644
+index 0000000..07e2899
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/deviceinfo/ActivityFunctiontest.java
+@@ -0,0 +1,90 @@
++package com.android.settings.deviceinfo;
++
++import android.os.Bundle;
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.Context;
++import android.content.DialogInterface;
++import android.content.Intent;
++import android.content.IntentFilter;
++import android.util.Log;
++import android.view.Menu;
++import android.view.View;
++import android.view.View.OnClickListener;
++import android.widget.Button;
++import android.widget.EditText;
++import com.android.settings.R;
++
++public class ActivityFunctiontest extends Activity {
++
++	private EditText mEditText;
++	private Button mCancel;
++	private Button mComfirm;
++	
++	private String mPassword;
++	private final static String mPass = "123456";
++	
++	private Context mContext;
++	@Override
++	protected void onCreate(Bundle savedInstanceState) {
++		super.onCreate(savedInstanceState);
++		setContentView(R.layout.activity_functiontest);
++		
++		mContext = this;
++		
++		mEditText = (EditText) findViewById(R.id.password);
++		
++		mCancel = (Button) findViewById(R.id.Cancel);
++		mCancel.setOnClickListener(new OnClickListener() {
++			
++			@Override
++			public void onClick(View v) {
++				// TODO Auto-generated method stub
++				finish();		
++			}
++		});
++		
++		mComfirm = (Button) findViewById(R.id.Comfirm);
++		mComfirm.setOnClickListener(mComfirmClickListener);
++		
++	}
++
++	private void FitPassWord(){
++			
++		Intent intent = new Intent(mContext,ActivityFunctiontestItem.class);
++		startActivity(intent);
++	}
++	
++	private void ErrorPassWord(){
++		
++		 new AlertDialog.Builder(mContext)
++		.setTitle(R.string.idata_password_dialog_title)
++        .setMessage(R.string.idata_password_dialog_message)
++        .setPositiveButton(R.string.idata_password_dialog_Positive, new DialogInterface.OnClickListener() {
++            public void onClick(DialogInterface dialog, int which) {
++             // do Nothing     
++            }
++        })
++        .create()
++        .show();
++	}
++	
++	 OnClickListener mComfirmClickListener = new OnClickListener() {
++		
++		@Override
++		public void onClick(View v) {
++			// TODO Auto-generated method stub
++			
++			mPassword = mEditText.getText().toString();
++			
++			if(mPassword.equals(mPass)){
++				FitPassWord();
++			}else{
++				ErrorPassWord();
++			}
++		}
++	};
++	
++  
++
++}
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/deviceinfo/ActivityFunctiontestItem.java b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/deviceinfo/ActivityFunctiontestItem.java
+new file mode 100644
+index 0000000..26e01b5
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/deviceinfo/ActivityFunctiontestItem.java
+@@ -0,0 +1,190 @@
++package com.android.settings.deviceinfo;
++
++import java.util.ArrayList;
++import java.util.List;
++
++import com.android.settings.R;
++import android.os.Bundle;
++import android.provider.ContactsContract.CommonDataKinds.Phone;
++import android.app.Activity;
++import android.app.AlertDialog;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.Intent;
++import android.telephony.TelephonyManager;
++import android.text.TextUtils;
++import android.view.View;
++import android.widget.AdapterView;
++import android.widget.AdapterView.OnItemClickListener;
++import android.widget.ArrayAdapter;
++import android.util.Log;
++
++import android.widget.ListView;
++
++//import com.kby.common.featureoption.FeatureOption;
++import android.os.SystemProperties;
++public class ActivityFunctiontestItem extends Activity implements OnItemClickListener{
++    
++    private final static String TAG = "ActivityFunctiontestItem";
++
++    private ListView mListView;
++	private Context mContext;
++	
++	
++	private final static int FactoryMode = 0;
++	private final static int EngineerMode = 1;
++	private final static int WhiteList = 2;
++	private final static int MonkeyTest = 3;
++	private final static int ScanTest = 4;
++	private final static int PosTest = 5;
++	private final static int CameraTest = 6;
++	private final static int OpenMtkLog = 7;
++//	private final static int IMEI = 4;
++//	private final static int TOUCH_CALIBRATION = 5;
++//	private final static int ScanTest = 6;
++	
++    private List<String> getData(){
++        
++        List<String> data = new ArrayList<String>();
++
++        data.add(getString(R.string.setting_test_factory_test));
++        //data.add(getString(R.string.setting_test_scanner_test));
++        //if(FeatureOption.KINGBERRY_CTA_SET) {
++        data.add(getString(R.string.setting_test_engineer_mode));
++         //}
++        //data.add(getString(R.string.setting_test_imei_check));
++	data.add(getString(R.string.setting_white_list_config));
++	data.add(getString(R.string.setting_monkey_test));
++	    data.add(getString(R.string.setting_test_scanner_test));
++	    data.add(getString(R.string.setting_test_start_pos_demo));
++	    data.add(getString(R.string.setting_test_start_camera));
++	    data.add(getString(R.string.setting_test_start_mtklog));
++
++
++        return data;
++    }
++    
++
++	@Override
++	protected void onCreate(Bundle savedInstanceState) {
++		super.onCreate(savedInstanceState);
++			
++		mContext = this;
++		
++		mListView = new ListView(this);
++		mListView.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_expandable_list_item_1,getData()));
++		mListView.setOnItemClickListener((OnItemClickListener)mContext);
++        setContentView(mListView);
++		
++	}
++
++	
++	@Override
++	public void onItemClick(AdapterView<?> arg0, View arg1, int position, long id) {
++		// TODO Auto-generated method stub
++		
++		Intent intent = new Intent(Intent.ACTION_MAIN);
++		
++		switch (position) {	
++        case FactoryMode:
++//        		intent.setComponent(new ComponentName("com.android.factorymode","com.android.factorymode.FactoryMode"));
++        		intent.setComponent(new ComponentName("com.android.autotest",  "com.android.autotest.FactoryMainActivity"));
++        		intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++        		intent.putExtra("view_type", "matrix");
++        		startActivity(intent);
++        	break;	
++
++	case WhiteList:
++			intent.setComponent(new ComponentName("com.android.settings","com.android.appwhitelist.AppWhiteListActivity"));
++            		intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++            		intent.putExtra("view_type", "whitelist");
++			startActivity(intent);
++		break;
++        
++        case ScanTest:
++            intent.setClassName("com.android.scannerdemo", "com.android.scannerdemo.MainActivity");
++            try {
++                startActivity(intent);
++            } catch (Exception e) {
++                Log.e(TAG, "Unable to start activity " + intent.toString());
++            }
++        	break;
++        /*	
++        case IMEI:
++        	
++               int phoneType = ((TelephonyManager)mContext.getSystemService(
++                            Context.TELEPHONY_SERVICE)).getPhoneType();
++                showIMEIPanel(mContext, true);
++                
++        	break;
++       */
++        /*case TOUCH_CALIBRATION:
++
++            intent = new Intent("com.mediatek.app.touchpanel.start");
++            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++            startActivity(intent);
++            break;*/
++        	
++		case EngineerMode:  
++		    intent.setComponent(new ComponentName("com.mediatek.engineermode",
++                            "com.mediatek.engineermode.EngineerMode"));
++		    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
++            startActivity(intent);
++		break;	
++	case MonkeyTest:
++        	int openMonkey = SystemProperties.getInt("persist.sys.monkey", 0);
++		if (openMonkey == 0) {
++		    SystemProperties.set("persist.sys.monkey", "1");
++		} 
++		
++        	break;
++            case PosTest:
++                intent.setClassName("test.apidemo.activity", "test.apidemo.activity.MainActivity");
++                try {
++                    startActivity(intent);
++                } catch (Exception e) {
++                    Log.e(TAG, "Unable to start activity " + intent.toString());
++                }
++                break;
++            case CameraTest:
++                intent.setClassName("com.mediatek.camera", "com.android.camera.CameraActivity");
++                try {
++                    startActivity(intent);
++                } catch (Exception e) {
++                    Log.e(TAG, "Unable to start activity " + intent.toString());
++                }
++                break;
++            case OpenMtkLog:
++                intent.setClassName("com.mediatek.mtklogger", "com.mediatek.mtklogger.MainActivity");
++                try {
++                    startActivity(intent);
++                } catch (Exception e) {
++                    Log.e(TAG, "Unable to start activity " + intent.toString());
++                }
++                break;
++		
++		default:
++			break;
++		}
++	}
++
++	
++     void showIMEIPanel(Context context, boolean useSystemWindow) {
++    
++
++          TelephonyManager telephonyManager = (TelephonyManager) mContext
++                            .getSystemService(Context.TELEPHONY_SERVICE);
++
++          CharSequence[] imeiStrs = new CharSequence[1];
++                    imeiStrs[0] = telephonyManager.getDeviceId();
++
++                    if(TextUtils.isEmpty(imeiStrs[0]))
++                        imeiStrs[0] = mContext.getResources().getString(R.string.idata_imei_invalid);
++
++                    AlertDialog alert = new AlertDialog.Builder(context).setTitle(R.string.idata_imei_title)
++                            .setItems(imeiStrs, null).setPositiveButton(R.string.idata_testfuntion_comfirm, null)
++                            .setCancelable(false).create();
++                    alert.show();
++       }
++           
++}
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/kb/apkins/Android.mk b/LA.UM.7.6.2/LINUX/android/packages/kb/apkins/Android.mk
+new file mode 100644
+index 0000000..d7f962b
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/kb/apkins/Android.mk
+@@ -0,0 +1,21 @@
++
++#ifeq ($(strip $(WHITE_LIST_SUPPORT)),yes)
++
++#LOCAL_PATH := $(call my-dir)
++#include $(CLEAR_VARS)
++
++#LOCAL_MODULE := package_ins_cfg
++
++#LOCAL_SRC_FILES := package_ins_cfg
++
++#LOCAL_MODULE_PATH := $(TARGET_OUT)/data/apkins
++#LOCAL_MODULE_TAGS := optional
++#LOCAL_MODULE_CLASS := SHARED_LIBRARIES
++#LOCAL_MODULE_SUFFIX:=
++#LOCAL_MODULE_SUFFIX:= .txt
++#LOCAL_CERTIFICATE:= PRESIGNED
++#LOCAL_PRELINK_MODULE := false
++#include $(BUILD_PREBUILT)  
++#endif
++
++
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/kb/apkins/package_ins_cfg b/LA.UM.7.6.2/LINUX/android/packages/kb/apkins/package_ins_cfg
+new file mode 100644
+index 0000000..72e8ffc
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/packages/kb/apkins/package_ins_cfg
+@@ -0,0 +1 @@
++*
+diff --git a/LA.UM.7.6.2/LINUX/android/system/core/rootdir/init.rc b/LA.UM.7.6.2/LINUX/android/system/core/rootdir/init.rc
+index a0a831e..b2cd8e5 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/core/rootdir/init.rc
++++ b/LA.UM.7.6.2/LINUX/android/system/core/rootdir/init.rc
+@@ -574,6 +574,9 @@ on post-fs-data
+ 
+     # Set SELinux security contexts on upgrade or policy update.
+     restorecon --recursive --skip-ce /data
++    #default package whitelist
++    exec - system system -- /system/bin/white
++
+ 
+     # Check any timezone data in /data is newer than the copy in /system, delete if not.
+     exec - system system -- /system/bin/tzdatacheck /system/usr/share/zoneinfo /data/misc/zoneinfo
+diff --git a/LA.UM.7.6.2/LINUX/android/system/core/white/Android.mk b/LA.UM.7.6.2/LINUX/android/system/core/white/Android.mk
+new file mode 100644
+index 0000000..307ff38
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/core/white/Android.mk
+@@ -0,0 +1,23 @@
++
++#ifeq ($(strip $(WHITE_LIST_SUPPORT)), yes)
++LOCAL_PATH:= $(call my-dir)
++include $(CLEAR_VARS)
++
++LOCAL_SRC_FILES:= \
++	white.c
++
++LOCAL_MODULE:= white
++
++LOCAL_CFLAGS += -DWHITE_LIST_SUPPORT
++
++LOCAL_FORCE_STATIC_EXECUTABLE := true
++
++LOCAL_SHARED_LIBRARIES := liblog
++
++LOCAL_STATIC_LIBRARIES := libfs_mgr libcutils libc
++
++include $(BUILD_EXECUTABLE)
++
++#endif
++
++
+diff --git a/LA.UM.7.6.2/LINUX/android/system/core/white/white.c b/LA.UM.7.6.2/LINUX/android/system/core/white/white.c
+new file mode 100644
+index 0000000..cde0b58
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/core/white/white.c
+@@ -0,0 +1,119 @@
++// Copyright 2006 The Android Open Source Project
++/*
++#include <cutils/logger.h>
++#include <cutils/logd.h>
++#include <cutils/sockets.h>
++#include <cutils/logprint.h>
++#include <cutils/event_tag_map.h>
++*/
++#include <stdio.h>
++#include <stdlib.h>
++#include <stdarg.h>
++#include <string.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <time.h>
++#include <errno.h>
++#include <assert.h>
++#include <ctype.h>
++#include <sys/socket.h>
++#include <arpa/inet.h>
++
++#include <sys/stat.h>
++
++#include <private/android_filesystem_config.h> //USER DEFINE
++
++
++#define WHITE_PATH "/data/apkins"
++#define WHITE_FILE_CONFIG "package_ins_cfg"
++
++
++
++/*
++ * if path exist return 1. else return 0
++ */
++int check_exist(char *path){
++    if(access(path, 0) == 0){
++        return 1;
++    }else{
++        return 0;
++    }
++}
++
++/**
++ * copy file src to dst
++ */
++int copy_file(char *src, char *dst){
++    char buffer[256];
++    int len;
++    FILE *in, *out;
++ 
++    if((in = fopen(src, "r")) == NULL){
++        return -1;
++    }
++    if((out = fopen(dst, "w")) == NULL){
++        fclose(in);
++        return -2;
++    } 
++
++    while((len = fread(buffer, sizeof(char), 256, in)) > 0) { 
++        fwrite(buffer, 1, len, out);
++    }
++    fclose(out);
++    fclose(in);
++
++    return 0;
++}
++ 
++
++int main(int argc, char **argv)
++{
++    int fd, len, ret;
++    char path[100];
++    int exist = 0;
++    
++#ifndef WHITE_LIST_SUPPORT
++    fprintf(stderr, "not support app white list, return directly!\n");
++    return 0;
++#endif
++    fprintf(stderr, "enter white list app config setup\n");
++    umask(0);
++
++    exist = check_exist(WHITE_PATH);
++    fprintf(stderr, "check directory : exist = %d\n", exist);
++    if(exist == 0){
++        ret = mkdir(WHITE_PATH, 0777);
++    }else{
++        chmod(WHITE_PATH, 0777);
++    }
++    strcpy(path, WHITE_PATH);
++    len = strlen(path);
++    if(path[len - 1] != '/'){
++        strcat(path, "/");
++    }
++    strcat(path, WHITE_FILE_CONFIG);
++    fd = open(path, O_RDWR/* | O_CREAT*/, S_IRWXU | S_IRWXG | S_IRWXO);
++    fprintf(stderr, "full path : %s, fd = %d\n", path, fd);
++    if(fd > 0) {
++        close(fd);
++    }else{
++        //copy from "system/data/apkins/package_ins_cfg"
++        char cmd[150];
++        strcpy(cmd, "cp /system/data/apkins/package_ins_cfg ");
++        strcat(cmd, path);
++//        system(cmd); 
++//        fprintf(stderr, "create package_ins_cfg : %s\n", cmd);
++        ret = copy_file("/system/data/apkins/package_ins_cfg", path);
++        fprintf(stderr, "create package_ins_cfg : ret = %d\n", ret);
++    }
++    umask(0);
++    chown(WHITE_PATH, AID_SYSTEM, AID_SHELL);
++    chmod(WHITE_PATH, 0755);
++    chown(path, AID_SYSTEM, AID_SHELL);
++    chmod(path, 0766);
++
++    fprintf(stderr, "finish white list app config setup\n");
++  
++    return 0;
++}
++
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/private/file_contexts b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/private/file_contexts
+index 4485b95..d410eae 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/private/file_contexts
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/private/file_contexts
+@@ -266,7 +266,7 @@
+ /system/etc/selinux/plat_sepolicy.cil       u:object_r:sepolicy_file:s0
+ /system/etc/selinux/plat_and_mapping_sepolicy\.cil\.sha256 u:object_r:sepolicy_file:s0
+ /system/bin/vr_hwc               u:object_r:vr_hwc_exec:s0
+-
++/system/bin/white                u:object_r:kbwhite_exec:s0
+ #############################
+ # Vendor files
+ #
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/private/kbwhite.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/private/kbwhite.te
+new file mode 100644
+index 0000000..218db8f
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/private/kbwhite.te
+@@ -0,0 +1,2 @@
++typeattribute kbwhite coredomain;
++init_daemon_domain(kbwhite)
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/public/kbwhite.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/public/kbwhite.te
+new file mode 100644
+index 0000000..78f6eb4
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/26.0/public/kbwhite.te
+@@ -0,0 +1,8 @@
++# The white command run by init.
++type kbwhite, domain,domain_deprecated;
++#typeattribute kbwhite coredomain; 
++#typeattribute kbwhite domain_deprecated;
++type kbwhite_exec, exec_type, file_type;
++
++#init_daemon_domain(kbwhite)
++
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/private/file_contexts b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/private/file_contexts
+index 5369758..f796d16 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/private/file_contexts
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/private/file_contexts
+@@ -273,7 +273,7 @@
+ /system/etc/selinux/plat_and_mapping_sepolicy\.cil\.sha256 u:object_r:sepolicy_file:s0
+ /system/bin/vr_hwc               u:object_r:vr_hwc_exec:s0
+ /system/bin/adbd                 u:object_r:adbd_exec:s0
+-
++/system/bin/white                u:object_r:kbwhite_exec:s0
+ #############################
+ # Vendor files
+ #
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/private/kbwhite.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/private/kbwhite.te
+new file mode 100644
+index 0000000..218db8f
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/private/kbwhite.te
+@@ -0,0 +1,2 @@
++typeattribute kbwhite coredomain;
++init_daemon_domain(kbwhite)
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/public/kbwhite.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/public/kbwhite.te
+new file mode 100644
+index 0000000..78f6eb4
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/27.0/public/kbwhite.te
+@@ -0,0 +1,8 @@
++# The white command run by init.
++type kbwhite, domain,domain_deprecated;
++#typeattribute kbwhite coredomain; 
++#typeattribute kbwhite domain_deprecated;
++type kbwhite_exec, exec_type, file_type;
++
++#init_daemon_domain(kbwhite)
++
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/app_neverallows.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/app_neverallows.te
+index 8d9ccd6..9e0af58 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/app_neverallows.te
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/app_neverallows.te
+@@ -91,19 +91,6 @@ neverallow { all_untrusted_apps -mediaprovider } { cache_file cache_recovery_fil
+ # World accessible data locations allow application to fill the device
+ # with unaccounted for data. This data will not get removed during
+ # application un-installation.
+-neverallow { all_untrusted_apps -mediaprovider } {
+-  fs_type
+-  -sdcard_type
+-  file_type
+-  -app_data_file            # The apps sandbox itself
+-  -media_rw_data_file       # Internal storage. Known that apps can
+-                            # leave artfacts here after uninstall.
+-  -user_profile_data_file   # Access to profile files
+-  userdebug_or_eng(`
+-    -method_trace_data_file # only on ro.debuggable=1
+-    -coredump_file          # userdebug/eng only
+-  ')
+-}:dir_file_class_set { create unlink };
+ 
+ # No untrusted component should be touching /dev/fuse
+ neverallow all_untrusted_apps fuse_device:chr_file *;
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/file_contexts b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/file_contexts
+index 6948816..d9a44a7 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/file_contexts
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/file_contexts
+@@ -295,7 +295,7 @@
+ /system/bin/statsd               u:object_r:statsd_exec:s0
+ /system/bin/bpfloader            u:object_r:bpfloader_exec:s0
+ /system/bin/wait_for_keymaster   u:object_r:wait_for_keymaster_exec:s0
+-
++/system/bin/white                u:object_r:kbwhite_exec:s0
+ #############################
+ # Vendor files
+ #
+@@ -537,7 +537,6 @@
+ /mnt/user(/.*)?             u:object_r:mnt_user_file:s0
+ /mnt/runtime(/.*)?          u:object_r:storage_file:s0
+ /storage(/.*)?              u:object_r:storage_file:s0
+-
+ #############################
+ # mount point for read-write vendor partitions
+ /mnt/vendor(/.*)?          u:object_r:mnt_vendor_file:s0
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/kbwhite.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/kbwhite.te
+new file mode 100644
+index 0000000..218db8f
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/kbwhite.te
+@@ -0,0 +1,2 @@
++typeattribute kbwhite coredomain;
++init_daemon_domain(kbwhite)
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/system_app.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/system_app.te
+index d71e050..937f187 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/system_app.te
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/private/system_app.te
+@@ -63,7 +63,7 @@ allow system_app asec_apk_file:file r_file_perms;
+ # kb add for leds
+ allow system_app sysfs_leds:dir { search };
+ allow system_app sysfs_leds:file { write getattr open };
+-
++allow system_app system_data_file:file { write  open };
+ # Allow system apps (like Settings) to interact with statsd
+ binder_call(system_app, statsd)
+ 
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/app.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/app.te
+index 6cb0edd..08ccacb 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/app.te
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/app.te
+@@ -454,7 +454,7 @@ neverallow appdomain exec_type:file
+ # specified in file_contexts.  Define a different type for portions
+ # that should be writable by apps.
+ neverallow appdomain system_data_file:dir_file_class_set
+-    { create write setattr relabelfrom relabelto append unlink link rename };
++    { create setattr relabelfrom relabelto append unlink link rename };
+ 
+ # Write to various other parts of /data.
+ neverallow appdomain drm_data_file:dir_file_class_set
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/domain.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/domain.te
+index c749a49..b209d94 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/domain.te
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/domain.te
+@@ -662,6 +662,7 @@ full_treble_only(`
+     -mediaextractor_service
+     -mediametrics_service
+     -mediaserver_service
++    #-kbwhite
+     -nfc_service
+     -radio_service
+     -virtual_touchpad_service
+@@ -812,6 +813,7 @@ full_treble_only(`
+   # /data/vendor
+   neverallow {
+     coredomain
++    -system_server
+     -appdomain # TODO(b/34980020) remove exemption for appdomain
+     -data_between_core_and_vendor_violators
+     -init
+@@ -826,6 +828,7 @@ full_treble_only(`
+     coredomain
+     -appdomain # TODO(b/34980020) remove exemption for appdomain
+     -data_between_core_and_vendor_violators
++    -system_server
+     -init
+     -vold_prepare_subdirs
+     } {
+@@ -843,6 +846,7 @@ full_treble_only(`
+     domain
+     -appdomain # TODO(b/34980020) remove exemption for appdomain
+     -coredomain
++    #-kbwhite
+     -data_between_core_and_vendor_violators # TODO(b/34980020) Remove once all violators have been cleaned up
+     -vendor_init
+   } {
+@@ -898,6 +902,7 @@ full_treble_only(`
+     domain
+     -appdomain # TODO(b/34980020) remove exemption for appdomain
+     -coredomain
++    #-kbwhite
+     -data_between_core_and_vendor_violators # TODO(b/34980020) Remove once all violators have been cleaned up
+     } {
+       system_data_file # default label for files on /data. Covered below
+@@ -1003,6 +1008,7 @@ full_treble_only(`
+         domain
+         -coredomain
+         -appdomain
++        #-kbwhite
+         -vendor_executes_system_violators
+         -vendor_init
+     } {
+@@ -1159,6 +1165,7 @@ neverallow {
+   -system_server
+   -system_app
+   -init
++  -kbwhite
+   -installd # for relabelfrom and unlink, check for this in explicit neverallow
+   -vold_prepare_subdirs # For unlink
+   with_asan(`-asan_extract')
+@@ -1172,6 +1179,7 @@ neverallow {
+   domain
+   -recovery
+   -uncrypt
++  #-kbwhite
+   -appdomain # finer-grained rules for appdomain are listed below
+   -system_server #populate com.android.providers.settings/databases/settings.db.
+   -installd # creation of app sandbox
+@@ -1194,6 +1202,7 @@ neverallow {
+   -appdomain
+   -installd # creation of sandbox
+   -recovery
++  #-kbwhite
+ } app_data_file:dir_file_class_set { create unlink };
+ 
+ #
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/kbwhite.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/kbwhite.te
+new file mode 100644
+index 0000000..ab538c9
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/prebuilts/api/28.0/public/kbwhite.te
+@@ -0,0 +1,11 @@
++# The white command run by init.
++type kbwhite, domain,domain_deprecated;
++#typeattribute kbwhite coredomain; 
++#typeattribute kbwhite domain_deprecated;
++type kbwhite_exec, exec_type, file_type;
++
++#init_daemon_domain(kbwhite)
++
++allow kbwhite system_data_file:dir create_dir_perms;
++allow kbwhite system_data_file:dir { search open read write add_name create getattr setattr };
++allow kbwhite system_data_file:file { open read write create append unlink ioctl getattr setattr };# The white command run by init.
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/app_neverallows.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/app_neverallows.te
+index 8d9ccd6..9e0af58 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/app_neverallows.te
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/app_neverallows.te
+@@ -91,19 +91,6 @@ neverallow { all_untrusted_apps -mediaprovider } { cache_file cache_recovery_fil
+ # World accessible data locations allow application to fill the device
+ # with unaccounted for data. This data will not get removed during
+ # application un-installation.
+-neverallow { all_untrusted_apps -mediaprovider } {
+-  fs_type
+-  -sdcard_type
+-  file_type
+-  -app_data_file            # The apps sandbox itself
+-  -media_rw_data_file       # Internal storage. Known that apps can
+-                            # leave artfacts here after uninstall.
+-  -user_profile_data_file   # Access to profile files
+-  userdebug_or_eng(`
+-    -method_trace_data_file # only on ro.debuggable=1
+-    -coredump_file          # userdebug/eng only
+-  ')
+-}:dir_file_class_set { create unlink };
+ 
+ # No untrusted component should be touching /dev/fuse
+ neverallow all_untrusted_apps fuse_device:chr_file *;
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/file_contexts b/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/file_contexts
+index 6948816..d9a44a7 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/file_contexts
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/file_contexts
+@@ -295,7 +295,7 @@
+ /system/bin/statsd               u:object_r:statsd_exec:s0
+ /system/bin/bpfloader            u:object_r:bpfloader_exec:s0
+ /system/bin/wait_for_keymaster   u:object_r:wait_for_keymaster_exec:s0
+-
++/system/bin/white                u:object_r:kbwhite_exec:s0
+ #############################
+ # Vendor files
+ #
+@@ -537,7 +537,6 @@
+ /mnt/user(/.*)?             u:object_r:mnt_user_file:s0
+ /mnt/runtime(/.*)?          u:object_r:storage_file:s0
+ /storage(/.*)?              u:object_r:storage_file:s0
+-
+ #############################
+ # mount point for read-write vendor partitions
+ /mnt/vendor(/.*)?          u:object_r:mnt_vendor_file:s0
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/kbwhite.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/kbwhite.te
+new file mode 100644
+index 0000000..218db8f
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/kbwhite.te
+@@ -0,0 +1,2 @@
++typeattribute kbwhite coredomain;
++init_daemon_domain(kbwhite)
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/system_app.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/system_app.te
+index d71e050..937f187 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/system_app.te
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/private/system_app.te
+@@ -63,7 +63,7 @@ allow system_app asec_apk_file:file r_file_perms;
+ # kb add for leds
+ allow system_app sysfs_leds:dir { search };
+ allow system_app sysfs_leds:file { write getattr open };
+-
++allow system_app system_data_file:file { write  open };
+ # Allow system apps (like Settings) to interact with statsd
+ binder_call(system_app, statsd)
+ 
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/app.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/app.te
+index 6cb0edd..08ccacb 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/app.te
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/app.te
+@@ -454,7 +454,7 @@ neverallow appdomain exec_type:file
+ # specified in file_contexts.  Define a different type for portions
+ # that should be writable by apps.
+ neverallow appdomain system_data_file:dir_file_class_set
+-    { create write setattr relabelfrom relabelto append unlink link rename };
++    { create setattr relabelfrom relabelto append unlink link rename };
+ 
+ # Write to various other parts of /data.
+ neverallow appdomain drm_data_file:dir_file_class_set
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/domain.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/domain.te
+index c749a49..b209d94 100644
+--- a/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/domain.te
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/domain.te
+@@ -662,6 +662,7 @@ full_treble_only(`
+     -mediaextractor_service
+     -mediametrics_service
+     -mediaserver_service
++    #-kbwhite
+     -nfc_service
+     -radio_service
+     -virtual_touchpad_service
+@@ -812,6 +813,7 @@ full_treble_only(`
+   # /data/vendor
+   neverallow {
+     coredomain
++    -system_server
+     -appdomain # TODO(b/34980020) remove exemption for appdomain
+     -data_between_core_and_vendor_violators
+     -init
+@@ -826,6 +828,7 @@ full_treble_only(`
+     coredomain
+     -appdomain # TODO(b/34980020) remove exemption for appdomain
+     -data_between_core_and_vendor_violators
++    -system_server
+     -init
+     -vold_prepare_subdirs
+     } {
+@@ -843,6 +846,7 @@ full_treble_only(`
+     domain
+     -appdomain # TODO(b/34980020) remove exemption for appdomain
+     -coredomain
++    #-kbwhite
+     -data_between_core_and_vendor_violators # TODO(b/34980020) Remove once all violators have been cleaned up
+     -vendor_init
+   } {
+@@ -898,6 +902,7 @@ full_treble_only(`
+     domain
+     -appdomain # TODO(b/34980020) remove exemption for appdomain
+     -coredomain
++    #-kbwhite
+     -data_between_core_and_vendor_violators # TODO(b/34980020) Remove once all violators have been cleaned up
+     } {
+       system_data_file # default label for files on /data. Covered below
+@@ -1003,6 +1008,7 @@ full_treble_only(`
+         domain
+         -coredomain
+         -appdomain
++        #-kbwhite
+         -vendor_executes_system_violators
+         -vendor_init
+     } {
+@@ -1159,6 +1165,7 @@ neverallow {
+   -system_server
+   -system_app
+   -init
++  -kbwhite
+   -installd # for relabelfrom and unlink, check for this in explicit neverallow
+   -vold_prepare_subdirs # For unlink
+   with_asan(`-asan_extract')
+@@ -1172,6 +1179,7 @@ neverallow {
+   domain
+   -recovery
+   -uncrypt
++  #-kbwhite
+   -appdomain # finer-grained rules for appdomain are listed below
+   -system_server #populate com.android.providers.settings/databases/settings.db.
+   -installd # creation of app sandbox
+@@ -1194,6 +1202,7 @@ neverallow {
+   -appdomain
+   -installd # creation of sandbox
+   -recovery
++  #-kbwhite
+ } app_data_file:dir_file_class_set { create unlink };
+ 
+ #
+diff --git a/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/kbwhite.te b/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/kbwhite.te
+new file mode 100644
+index 0000000..ab538c9
+--- /dev/null
++++ b/LA.UM.7.6.2/LINUX/android/system/sepolicy/public/kbwhite.te
+@@ -0,0 +1,11 @@
++# The white command run by init.
++type kbwhite, domain,domain_deprecated;
++#typeattribute kbwhite coredomain; 
++#typeattribute kbwhite domain_deprecated;
++type kbwhite_exec, exec_type, file_type;
++
++#init_daemon_domain(kbwhite)
++
++allow kbwhite system_data_file:dir create_dir_perms;
++allow kbwhite system_data_file:dir { search open read write add_name create getattr setattr };
++allow kbwhite system_data_file:file { open read write create append unlink ioctl getattr setattr };# The white command run by init.

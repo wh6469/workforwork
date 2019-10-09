@@ -1,0 +1,754 @@
+commit 04ac986d2f8963f9c8818e41bc7da5ffbd950bbb
+Author: wanghuan <wanghuan@kingberry.com.cn>
+Date:   Fri Jul 5 14:33:50 2019 +0800
+
+    [基础-功能]Aa键数字字母切换功能
+
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/api/current.txt b/LA.UM.7.6.2/LINUX/android/frameworks/base/api/current.txt
+index 28f23fa..2d311af 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/api/current.txt
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/api/current.txt
+@@ -8307,6 +8307,7 @@ package android.bluetooth {
+   }
+ 
+   public final class BluetoothHeadset implements android.bluetooth.BluetoothProfile {
++    method public void finalize();
+     method public java.util.List<android.bluetooth.BluetoothDevice> getConnectedDevices();
+     method public int getConnectionState(android.bluetooth.BluetoothDevice);
+     method public java.util.List<android.bluetooth.BluetoothDevice> getDevicesMatchingConnectionStates(int[]);
+@@ -36789,6 +36790,9 @@ package android.provider {
+     field public static final java.lang.String FONT_SCALE = "font_scale";
+     field public static final java.lang.String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
+     field public static final deprecated java.lang.String HTTP_PROXY = "http_proxy";
++    field public static final java.lang.String IDATA_INPUT_SWITCH_ENABLE = "idata_input_switch_enable";
++    field public static final java.lang.String IDATA_INPUT_SWITCH_LAST_VALUE = "idata_input_switch_last_value";
++    field public static final java.lang.String IDATA_INPUT_SWITCH_VALUE = "idata_input_switch_value";
+     field public static final deprecated java.lang.String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
+     field public static final deprecated java.lang.String LOCATION_PROVIDERS_ALLOWED = "location_providers_allowed";
+     field public static final deprecated java.lang.String LOCK_PATTERN_ENABLED = "lock_pattern_autolock";
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/api/system-current.txt b/LA.UM.7.6.2/LINUX/android/frameworks/base/api/system-current.txt
+index 3a32eca..aafb21e 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/api/system-current.txt
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/api/system-current.txt
+@@ -5482,12 +5482,12 @@ package android.telephony.ims {
+     method public void callSessionMergeStarted(android.telephony.ims.stub.ImsCallSessionImplBase, android.telephony.ims.ImsCallProfile);
+     method public void callSessionMultipartyStateChanged(boolean);
+     method public void callSessionProgressing(android.telephony.ims.ImsStreamMediaProfile);
++    method public void callSessionPropertyChanged(int);
+     method public void callSessionRemoveParticipantsRequestDelivered();
+     method public void callSessionRemoveParticipantsRequestFailed(android.telephony.ims.ImsReasonInfo);
+     method public void callSessionResumeFailed(android.telephony.ims.ImsReasonInfo);
+     method public void callSessionResumeReceived(android.telephony.ims.ImsCallProfile);
+     method public void callSessionResumed(android.telephony.ims.ImsCallProfile);
+-    method public void callSessionPropertyChanged(int);
+     method public void callSessionRttMessageReceived(java.lang.String);
+     method public void callSessionRttModifyRequestReceived(android.telephony.ims.ImsCallProfile);
+     method public void callSessionRttModifyResponseReceived(int);
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/api/test-current.txt b/LA.UM.7.6.2/LINUX/android/frameworks/base/api/test-current.txt
+index e34614e..2bd60b8 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/api/test-current.txt
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/api/test-current.txt
+@@ -248,8 +248,8 @@ package android.content.pm {
+   public abstract class PackageManager {
+     method public abstract java.lang.String getDefaultBrowserPackageNameAsUser(int);
+     method public abstract int getInstallReason(java.lang.String, android.os.UserHandle);
+-    method public abstract java.util.List<android.content.pm.PackageInfo> getInstalledPackagesAsUser(int, int);
+     method public abstract java.util.List<android.content.pm.ApplicationInfo> getInstalledApplicationsAsUser(int, int);
++    method public abstract java.util.List<android.content.pm.PackageInfo> getInstalledPackagesAsUser(int, int);
+     method public abstract java.lang.String[] getNamesForUids(int[]);
+     method public abstract java.lang.String getPermissionControllerPackageName();
+     method public abstract java.lang.String getServicesSystemSharedLibraryPackageName();
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java
+index 222b18d..62ed34f 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/core/java/android/inputmethodservice/InputMethodService.java
+@@ -1995,7 +1995,19 @@ public class InputMethodService extends AbstractInputMethodService {
+     public void onStartInput(EditorInfo attribute, boolean restarting) {
+         // Intentionally empty
+     }
+-    
++    //kingberry.taochangbang for NUM_CHAR_SWITCH_SUPPORT -s
++    private boolean mDisableswitch = false;
++    private void setNunCharSiwtch(boolean state) {
++         Intent switchintent = new Intent("android.intent.action.AaSwitch");
++         if (state) {
++             switchintent.putExtra("switch_enable", true);
++         } else {
++             switchintent.putExtra("switch_enable", false);
++         }
++         sendBroadcast(switchintent);
++     }
++     //kingberry.end   
++ 
+     void doFinishInput() {
+         if (mInputViewStarted) {
+             if (DEBUG) Log.v(TAG, "CALL: onFinishInputView");
+@@ -2013,12 +2025,28 @@ public class InputMethodService extends AbstractInputMethodService {
+         mInputStarted = false;
+         mStartedInputConnection = null;
+         mCurCompletions = null;
++        //kingberry.taochangbang for NUM_CHAR_SWITCH_SUPPORT -s
++        if(/*(FeatureOption.NUM_CHAR_SWITCH_SUPPORT == true) && */mDisableswitch == true){
++            setNunCharSiwtch(true);
++            mDisableswitch = false;
++        }
++        //kingberry.end
+     }
+ 
+     void doStartInput(InputConnection ic, EditorInfo attribute, boolean restarting) {
+         if (!restarting) {
+             doFinishInput();
+         }
++        //kingberry.taochangbang for NUM_CHAR_SWITCH_SUPPORT -s
++        Log.v(TAG, "attribute.inputType -------: " + attribute.inputType);
++        if( /*(FeatureOption.NUM_CHAR_SWITCH_SUPPORT == true) && */(attribute.inputType == android.text.InputType.TYPE_CLASS_PHONE || 
++            attribute.inputType == android.text.InputType.TYPE_CLASS_NUMBER ||
++            attribute.inputType == 0x12||attribute.inputType == 4||
++            attribute.inputType==20 ||attribute.inputType==36)){
++            mDisableswitch = true;
++            setNunCharSiwtch(false);
++        }
++        //kingberry.end
+         mInputStarted = true;
+         mStartedInputConnection = ic;
+         mInputEditorInfo = attribute;
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/core/java/android/provider/Settings.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/core/java/android/provider/Settings.java
+index 0cde3a5..7c10702 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/core/java/android/provider/Settings.java
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/core/java/android/provider/Settings.java
+@@ -2874,6 +2874,12 @@ public final class Settings {
+          */
+         public static final int END_BUTTON_BEHAVIOR_DEFAULT = END_BUTTON_BEHAVIOR_SLEEP;
+ 
++        //kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT start
++        public static final String IDATA_INPUT_SWITCH_ENABLE = "idata_input_switch_enable";
++        public static final String IDATA_INPUT_SWITCH_LAST_VALUE = "idata_input_switch_last_value";
++        public static final String IDATA_INPUT_SWITCH_VALUE = "idata_input_switch_value";
++        //kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT end
++
+         /**
+          * Is advanced settings mode turned on. 0 == no, 1 == yes
+          * @hide
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_lower.png b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_lower.png
+new file mode 100644
+index 0000000..9f2e2ec
+Binary files /dev/null and b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_lower.png differ
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_number.png b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_number.png
+new file mode 100644
+index 0000000..b8a04fc
+Binary files /dev/null and b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_number.png differ
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_upper.png b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_upper.png
+new file mode 100644
+index 0000000..59be2c8
+Binary files /dev/null and b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/english_upper.png differ
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/fn.png b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/fn.png
+new file mode 100644
+index 0000000..47e9b1f
+Binary files /dev/null and b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/res/drawable/fn.png differ
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java
+index 89e55a7..17f3884 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/PhoneStatusBarPolicy.java
+@@ -199,6 +199,8 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
+         filter.addAction("com.intent.scanner.statusbar");
+         //kingberry.xdh.add   2018.10.17
+ 
++        filter.addAction("com.idatachina.keystate.iconchange");//kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT
++
+         mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
+ 
+         // listen for user / profile change.
+@@ -251,6 +253,26 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
+         mIconController.setIconVisibility("scannericon", false);
+         //kingberry.xdh add for scanner :BARCODE_SCANNER_SUPPORT -e
+         
++        //kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT -s
++        int mInputMode = Settings.System.getInt(mContext.getContentResolver(),
++                Settings.System.IDATA_INPUT_SWITCH_VALUE, 0);
++        if (mInputMode == 0) {
++            mIconController.setIcon("idatakeyshift", R.drawable.english_number, null);
++            mIconController.setIconVisibility("idatakeyshift", true);
++
++        } else if (mInputMode == 1) {
++            mIconController.setIcon("idatakeyshift", R.drawable.english_lower, null);
++            mIconController.setIconVisibility("idatakeyshift", true);
++
++        } else if (mInputMode == 2) {
++            mIconController.setIcon("idatakeyshift", R.drawable.english_upper, null);
++            mIconController.setIconVisibility("idatakeyshift", true);
++        } else if (mInputMode == 3) {
++            mIconController.setIcon("idatakeyshift", R.drawable.fn, null);
++            mIconController.setIconVisibility("idatakeyshift", true);
++        }
++        //kingberry.end
++        
+         mRotationLockController.addCallback(this);
+         mBluetooth.addCallback(this);
+         mProvisionedController.addCallback(this);
+@@ -784,6 +806,34 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
+     
+     //kingberry.xdh add for scanner :BARCODE_SCANNER_SUPPORT -e
+ 
++    // kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT -s
++    private final void updateKeyState(Intent intent) {
++
++        int state = intent.getIntExtra("keystate", -1);
++
++        if (state == -1) {
++            return;
++        }
++
++        if (state == 0) {
++            mIconController.setIcon("idatakeyshift", R.drawable.english_number, null);
++            mIconController.setIconVisibility("idatakeyshift", true);
++        } else if (state == 1) {
++            mIconController.setIcon("idatakeyshift", R.drawable.english_lower, null);
++            mIconController.setIconVisibility("idatakeyshift", true);
++        } else if (state == 2) {
++            mIconController.setIcon("idatakeyshift", R.drawable.english_upper, null);
++            mIconController.setIconVisibility("idatakeyshift", true);
++        } else if (state == 3) {
++            mIconController.setIcon("idatakeyshift", R.drawable.fn, null);
++            mIconController.setIconVisibility("idatakeyshift", true);
++        } else {
++            mIconController.setIconVisibility("idatakeyshift", false);
++        }
++
++    }
++    // kingberry.end
++      
+     private void updateHeadsetPlug(Intent intent) {
+         boolean connected = intent.getIntExtra("state", 0) != 0;
+         boolean hasMic = intent.getIntExtra("microphone", 0) != 0;
+@@ -844,6 +894,9 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
+ 				case "com.intent.scanner.statusbar":
+                 updateScannerState(intent);
+ 				    break;
++				case "com.idatachina.keystate.iconchange"://kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT
++				    updateKeyState(intent);
++				    break;
+             }
+         }
+     };
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarIconController.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarIconController.java
+index 5537842..d5efe5c 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarIconController.java
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarIconController.java
+@@ -109,7 +109,8 @@ public interface StatusBarIconController {
+         protected void onIconAdded(int index, String slot, boolean blocked,
+                 StatusBarIconHolder holder) {
+             StatusIconDisplayable view = addHolder(index, slot, blocked, holder);
+-   if(!view.getSlot().equals("scannericon"))
++   //if(!view.getSlot().equals("scannericon"))
++   if(!view.getSlot().equals("scannericon") && !view.getSlot().equals("idatakeyshift"))  //idatakeyshift for NUM_CHAR_SWITCH_SUPPORT
+             mDarkIconDispatcher.addDarkReceiver((DarkReceiver) view);
+         }
+ 
+@@ -142,7 +143,8 @@ public interface StatusBarIconController {
+             View child = mGroup.getChildAt(viewIndex);
+                 if (child instanceof StatusBarIconView) {
+                     StatusBarIconView v = (StatusBarIconView) child;
+-                     if(!v.getSlot().equals("scannericon")){
++                    // if(!v.getSlot().equals("scannericon")){
++					 if(!v.getSlot().equals("scannericon") && !v.getSlot().equals("idatakeyshift")){ //idatakeyshift for NUM_CHAR_SWITCH_SUPPORT
+             			mDarkIconDispatcher.applyDark((DarkReceiver) mGroup.getChildAt(viewIndex));
+ 			}
+ 
+@@ -176,7 +178,8 @@ public interface StatusBarIconController {
+                 StatusBarIconHolder holder) {
+             StatusIconDisplayable view = addHolder(index, slot, blocked, holder);
+        		//by xdh for scanner icon e
+-          	if(!view.getSlot().equals("scannericon")){
++          	//if(!view.getSlot().equals("scannericon")){
++			if(!view.getSlot().equals("scannericon") && !view.getSlot().equals("idatakeyshift")){ //idatakeyshift for NUM_CHAR_SWITCH_SUPPORT
+ 		    view.setStaticDrawableColor(mColor);
+ 		    view.setDecorColor(mColor);
+ 		}
+@@ -189,7 +192,8 @@ public interface StatusBarIconController {
+                 if (child instanceof StatusIconDisplayable) {
+                     StatusIconDisplayable icon = (StatusIconDisplayable) child;
+                 //by xdh for scanner icon e
+-                   if(!icon.getSlot().equals("scannericon")){
++                   //if(!icon.getSlot().equals("scannericon")){
++				   if(!icon.getSlot().equals("scannericon") && !icon.getSlot().equals("idatakeyshift")){ //idatakeyshift for NUM_CHAR_SWITCH_SUPPORT
+                     icon.setStaticDrawableColor(mColor);
+                     icon.setDecorColor(mColor);
+ 					}
+diff --git a/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+index 708e994..9ac92ac 100644
+--- a/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/LA.UM.7.6.2/LINUX/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -297,6 +297,7 @@ import java.io.FileReader;
+ import java.io.IOException;
+ import java.io.PrintWriter;
+ import java.util.List;
++import android.app.Instrumentation; //kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT
+ 
+ /**
+  * WindowManagerPolicy implementation for the Android phone UI.  This
+@@ -656,6 +657,34 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+     // The last window we were told about in focusChanged.
+     WindowState mFocusedWindow;
+     IApplicationToken mFocusedApp;
++    
++    // kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT -s
++    boolean mAaSwitch = true;
++    public static final String NUM_CHAR_SWITCH = "android.intent.action.AaSwitch";
++    static ExkeyStatus[] exKeyTable = new ExkeyStatus[512];
++    static int g_lastkeyCode = 0;
++
++    static boolean mKpdInitFinish = false;
++
++    static boolean Is_simulateKey = false;
++    static int mInputMode = 0;
++    static final int MODE_KB_NUM = 0;
++    static final int MODE_KB_LOWER = 1;
++    static final int MODE_KB_UPPER = 2;
++    static boolean TIME_OUT = false;
++
++    public class ExkeyStatus {
++        public int[] Func = {
++                0, 0, 0, 0
++        };
++        public int FuncIndex;
++        public int FuncLen;
++        public long lastTickCount;
++
++        public ExkeyStatus() {
++        }
++    }
++    // kingberry.end
+ 
+     PointerLocationView mPointerLocationView;
+ 
+@@ -2223,6 +2252,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+         filter.addAction(UiModeManager.ACTION_ENTER_DESK_MODE);
+         filter.addAction(UiModeManager.ACTION_EXIT_DESK_MODE);
+         filter.addAction(Intent.ACTION_DOCK_EVENT);
++        filter.addAction(NUM_CHAR_SWITCH); //kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT
+         Intent intent = context.registerReceiver(mDockReceiver, filter);
+         if (intent != null) {
+             // Retrieve current sticky dock event broadcast.
+@@ -2389,6 +2419,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+             startedGoingToSleep(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
+             finishedGoingToSleep(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
+         }
++        // kingberry.taochangbang add NUM_CHAR_SWITCH_SUPPORT -s
++        for (int i = 0; i < exKeyTable.length; i++)
++            exKeyTable[i] = new ExkeyStatus();
++        // kingberry.end
+ 
+         mWindowManagerInternal.registerAppTransitionListener(
+                 mStatusBarController.getAppTransitionListener());
+@@ -2419,6 +2453,124 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+                 });
+         mScreenshotHelper = new ScreenshotHelper(mContext);
+     }
++    
++    // kingberry.taochangbang add NUM_CHAR_SWITCH_SUPPORT -s
++    public int DoKeypadPress_ExFunc(int paramInt) {
++        int keycode = paramInt;
++        if (mInputMode == MODE_KB_NUM) {
++            if (g_lastkeyCode != paramInt) {
++                exKeyTable[g_lastkeyCode].lastTickCount = 0L;
++                exKeyTable[g_lastkeyCode].FuncIndex = 0;
++            }
++            g_lastkeyCode = paramInt;
++
++        } else {
++            long l = System.currentTimeMillis() - exKeyTable[paramInt].lastTickCount;
++            if (g_lastkeyCode == paramInt) {
++                if (l > 800L) {
++                    exKeyTable[paramInt].FuncIndex = 0;
++                    TIME_OUT = false;
++                } else {
++                    simulateKeystroke(67);
++                    TIME_OUT = true;
++                }
++            } else if (g_lastkeyCode != paramInt) {
++                exKeyTable[paramInt].FuncIndex = 0;
++                exKeyTable[g_lastkeyCode].lastTickCount = 0L;
++                TIME_OUT = false;
++            }
++            keycode = exKeyTable[paramInt].Func[exKeyTable[paramInt].FuncIndex];
++            exKeyTable[paramInt].lastTickCount = System.currentTimeMillis();
++            ExkeyStatus localExkeyStatus = exKeyTable[paramInt];
++            localExkeyStatus.FuncIndex = (1 + localExkeyStatus.FuncIndex);
++            if (exKeyTable[paramInt].FuncIndex >= exKeyTable[paramInt].FuncLen)
++                exKeyTable[paramInt].FuncIndex = 0;
++            g_lastkeyCode = paramInt;
++
++        }
++        return keycode;
++
++    }
++
++    public void KpdPddInit_ExFunc() {
++        Log.i("MYKEYTEST", "KpdPddInit_ExFunc");
++        exKeyTable[KeyEvent.KEYCODE_0].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_0].Func[0] = KeyEvent.KEYCODE_SPACE;
++        exKeyTable[KeyEvent.KEYCODE_0].FuncLen = 1;
++        exKeyTable[KeyEvent.KEYCODE_0].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_1].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_1].Func[0] = KeyEvent.KEYCODE_AT;
++        exKeyTable[KeyEvent.KEYCODE_1].Func[1] = KeyEvent.KEYCODE_SLASH;
++        exKeyTable[KeyEvent.KEYCODE_1].Func[2] = KeyEvent.KEYCODE_PLUS;
++        exKeyTable[KeyEvent.KEYCODE_1].FuncLen = 3;
++        exKeyTable[KeyEvent.KEYCODE_1].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_2].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_2].Func[0] = KeyEvent.KEYCODE_A;
++        exKeyTable[KeyEvent.KEYCODE_2].Func[1] = KeyEvent.KEYCODE_B;
++        exKeyTable[KeyEvent.KEYCODE_2].Func[2] = KeyEvent.KEYCODE_C;
++        exKeyTable[KeyEvent.KEYCODE_2].FuncLen = 3;
++        exKeyTable[KeyEvent.KEYCODE_2].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_3].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_3].Func[0] = KeyEvent.KEYCODE_D;
++        exKeyTable[KeyEvent.KEYCODE_3].Func[1] = KeyEvent.KEYCODE_E;
++        exKeyTable[KeyEvent.KEYCODE_3].Func[2] = KeyEvent.KEYCODE_F;
++        exKeyTable[KeyEvent.KEYCODE_3].FuncLen = 3;
++        exKeyTable[KeyEvent.KEYCODE_3].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_4].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_4].Func[0] = KeyEvent.KEYCODE_G;
++        exKeyTable[KeyEvent.KEYCODE_4].Func[1] = KeyEvent.KEYCODE_H;
++        exKeyTable[KeyEvent.KEYCODE_4].Func[2] = KeyEvent.KEYCODE_I;
++        exKeyTable[KeyEvent.KEYCODE_4].FuncLen = 3;
++        exKeyTable[KeyEvent.KEYCODE_4].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_5].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_5].Func[0] = KeyEvent.KEYCODE_J;
++        exKeyTable[KeyEvent.KEYCODE_5].Func[1] = KeyEvent.KEYCODE_K;
++        exKeyTable[KeyEvent.KEYCODE_5].Func[2] = KeyEvent.KEYCODE_L;
++        exKeyTable[KeyEvent.KEYCODE_5].FuncLen = 3;
++        exKeyTable[KeyEvent.KEYCODE_5].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_6].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_6].Func[0] = KeyEvent.KEYCODE_M;
++        exKeyTable[KeyEvent.KEYCODE_6].Func[1] = KeyEvent.KEYCODE_N;
++        exKeyTable[KeyEvent.KEYCODE_6].Func[2] = KeyEvent.KEYCODE_O;
++        exKeyTable[KeyEvent.KEYCODE_6].FuncLen = 3;
++        exKeyTable[KeyEvent.KEYCODE_6].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_STAR].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_STAR].Func[0] = KeyEvent.KEYCODE_PERIOD;
++        exKeyTable[KeyEvent.KEYCODE_STAR].FuncLen = 1;
++        exKeyTable[KeyEvent.KEYCODE_STAR].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_7].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_7].Func[0] = KeyEvent.KEYCODE_P;
++        exKeyTable[KeyEvent.KEYCODE_7].Func[1] = KeyEvent.KEYCODE_Q;
++        exKeyTable[KeyEvent.KEYCODE_7].Func[2] = KeyEvent.KEYCODE_R;
++        exKeyTable[KeyEvent.KEYCODE_7].Func[3] = KeyEvent.KEYCODE_S;
++        exKeyTable[KeyEvent.KEYCODE_7].FuncLen = 4;
++        exKeyTable[KeyEvent.KEYCODE_7].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_8].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_8].Func[0] = KeyEvent.KEYCODE_T;
++        exKeyTable[KeyEvent.KEYCODE_8].Func[1] = KeyEvent.KEYCODE_U;
++        exKeyTable[KeyEvent.KEYCODE_8].Func[2] = KeyEvent.KEYCODE_V;
++        exKeyTable[KeyEvent.KEYCODE_8].FuncLen = 3;
++        exKeyTable[KeyEvent.KEYCODE_8].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_9].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_9].Func[0] = KeyEvent.KEYCODE_W;
++        exKeyTable[KeyEvent.KEYCODE_9].Func[1] = KeyEvent.KEYCODE_X;
++        exKeyTable[KeyEvent.KEYCODE_9].Func[2] = KeyEvent.KEYCODE_Y;
++        exKeyTable[KeyEvent.KEYCODE_9].Func[3] = KeyEvent.KEYCODE_Z;
++        exKeyTable[KeyEvent.KEYCODE_9].FuncLen = 4;
++        exKeyTable[KeyEvent.KEYCODE_9].FuncIndex = 0;
++        exKeyTable[KeyEvent.KEYCODE_POUND].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_POUND].Func[0] = KeyEvent.KEYCODE_MINUS;
++        exKeyTable[KeyEvent.KEYCODE_POUND].FuncLen = 1;
++        exKeyTable[KeyEvent.KEYCODE_POUND].FuncIndex = 0;
++
++        exKeyTable[KeyEvent.KEYCODE_PERIOD].lastTickCount = 0L;
++        exKeyTable[KeyEvent.KEYCODE_PERIOD].Func[0] = KeyEvent.KEYCODE_STAR;
++        exKeyTable[KeyEvent.KEYCODE_PERIOD].FuncLen = 1;
++        exKeyTable[KeyEvent.KEYCODE_PERIOD].FuncIndex = 0;
++
++        mKpdInitFinish = true;
++    }
++    // kingberry.end
+ 
+     /**
+      * Read values from config.xml that may be overridden depending on
+@@ -6212,6 +6364,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+                 && (!isNavBarVirtKey || mNavBarVirtualKeyHapticFeedbackEnabled)
+                 && event.getRepeatCount() == 0;
+ 
++        // kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT -s
++        int switch_enable = Settings.System.getInt(mContext.getContentResolver(),
++                Settings.System.IDATA_INPUT_SWITCH_ENABLE, 1);
++        mInputMode = Settings.System.getInt(mContext.getContentResolver(),
++                Settings.System.IDATA_INPUT_SWITCH_VALUE, 0);
++        if (down && switch_enable == 1 && mKpdInitFinish == false) {
++            KpdPddInit_ExFunc();
++        }
++        // kingberry.end
++        
+         // Handle special keys.
+         switch (keyCode) {
+             case KeyEvent.KEYCODE_BACK: {
+@@ -6508,6 +6670,129 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+                 }
+                 break;
+             }
++            // kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT -s
++            case KeyEvent.KEYCODE_CAPS_LOCK: {
++
++                if (Settings.System.getInt(mContext.getContentResolver(), "is_autotest_test_keys",
++                        0) == 1) {
++                    break;
++                }
++
++                if (down && switch_enable == 1) {
++                    if (mInputMode == MODE_KB_NUM) {
++                        mInputMode = MODE_KB_LOWER;
++                    } else if (mInputMode == MODE_KB_LOWER) {
++                        mInputMode = MODE_KB_UPPER;
++                    } else if (mInputMode == MODE_KB_UPPER) {
++                        mInputMode = MODE_KB_NUM;
++                    }
++
++                    Settings.System.putInt(mContext.getContentResolver(),
++                            Settings.System.IDATA_INPUT_SWITCH_VALUE, mInputMode);
++
++                    Intent localIntent = new Intent("com.idatachina.keystate.iconchange");
++                    localIntent.putExtra("keystate", mInputMode);
++                    mContext.sendOrderedBroadcast(localIntent, null);
++                }
++
++                break;
++
++            }
++            case KeyEvent.KEYCODE_POUND: {
++
++                if (mInputMode != MODE_KB_NUM && switch_enable == 1 && mAaSwitch == true) {
++
++                    if (down)
++                        simulateKeystroke(KeyEvent.KEYCODE_MINUS);
++
++                    result &= ~ACTION_PASS_TO_USER;
++                }
++
++                break;
++            }
++            case KeyEvent.KEYCODE_STAR: {
++                /*
++                 * output '.' when switch to input number.
++                 */
++                /*
++                 * if(FeatureOption.KINGBERRY_VENDOR_WY || FeatureOption.KINGBERRY_VENDOR_YZ||
++                 * FeatureOption.KINGBERRY_VENDOR_GT){ if(mInputMode == MODE_KB_NUM) { if(down){
++                 * String ACTION_COMMIT_TEXT_SKIP_IME = "android.intent.action.SKIP_INPUT_METHOD";
++                 * Intent it =new Intent(ACTION_COMMIT_TEXT_SKIP_IME); it.putExtra("text", ".");
++                 * mContext.sendOrderedBroadcast(it, null); } result&=~ACTION_PASS_TO_USER; } } else
++                 * {
++                 */
++                if (mInputMode != MODE_KB_NUM && switch_enable == 1 && mAaSwitch == true) {
++                    if (down) {
++                        simulateKeystroke(KeyEvent.KEYCODE_PERIOD);
++                    }
++                    result &= ~ACTION_PASS_TO_USER;
++                }
++                // }
++                break;
++            }
++            /*
++             * case KeyEvent.KEYCODE_PERIOD: { if(switch_enable == 1 && mAaSwitch == true) {
++             * if(mInputMode != MODE_KB_NUM) { if(down){ simulateKeystroke(KeyEvent.KEYCODE_STAR); }
++             * } else { String ACTION_COMMIT_TEXT_SKIP_IME =
++             * "android.intent.action.SKIP_INPUT_METHOD"; Intent it =new
++             * Intent(ACTION_COMMIT_TEXT_SKIP_IME); it.putExtra("text", ".");
++             * mContext.sendOrderedBroadcast(it, null); } result&=~ACTION_PASS_TO_USER; } break; }
++             */
++
++            case KeyEvent.KEYCODE_0:
++            case KeyEvent.KEYCODE_1:
++            case KeyEvent.KEYCODE_2:
++            case KeyEvent.KEYCODE_3:
++            case KeyEvent.KEYCODE_4:
++            case KeyEvent.KEYCODE_5:
++            case KeyEvent.KEYCODE_6:
++            case KeyEvent.KEYCODE_7:
++            case KeyEvent.KEYCODE_8:
++            case KeyEvent.KEYCODE_9: {
++                if (mAaSwitch == true) {
++                    if (down) {
++                        int newCode = DoKeypadPress_ExFunc(keyCode);
++                        Log.i("MYKEYTEST", "keyCode " + keyCode);
++                        Log.i("MYKEYTEST", "newCode " + newCode);
++                        if (newCode != keyCode) {
++                            if (mInputMode == MODE_KB_UPPER && switch_enable == 1) {
++                                int keyChar;
++                                keyChar = 0;
++                                if (newCode >= KeyEvent.KEYCODE_A
++                                        && newCode <= KeyEvent.KEYCODE_Z) {
++                                    keyChar = newCode - KeyEvent.KEYCODE_A + 'A';
++                                    String result_t = String.valueOf((char) keyChar);
++                                    // if(g_lastkeyCode == keyCode&&TIME_OUT)
++                                    // simulateKeystroke(KeyEvent.KEYCODE_DEL);
++                                    new Instrumentation().sendStringSync(result_t);
++                                    result &= ~ACTION_PASS_TO_USER;
++                                } else {
++
++                                    simulateKeystroke(newCode);
++                                }
++                                result &= ~ACTION_PASS_TO_USER;
++
++                            } else if (mInputMode == MODE_KB_LOWER && switch_enable == 1) {
++                                simulateKeystroke(newCode);
++
++                                result &= ~ACTION_PASS_TO_USER;
++                            }
++
++                        }
++
++                    }
++
++                    if (!down) {
++                        if (mInputMode != MODE_KB_NUM && switch_enable == 1)
++                            result &= ~ACTION_PASS_TO_USER;
++                        else
++                            result |= ACTION_PASS_TO_USER;
++                    }
++                }
++                break;
++            }
++            // kingberry.end
+         }
+ 
+         if (useHapticFeedback) {
+@@ -6520,6 +6805,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+ 
+         return result;
+     }
++    
++    // kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT -s
++    public void simulateKeystroke(final int keycode) {
++        new Instrumentation().sendKeyDownUpSync(keycode);
++    }
++    // kingberry.end
+ 
+     /**
+      * Handle statusbar expansion events.
+@@ -6798,6 +7089,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+             if (Intent.ACTION_DOCK_EVENT.equals(intent.getAction())) {
+                 mDockMode = intent.getIntExtra(Intent.EXTRA_DOCK_STATE,
+                         Intent.EXTRA_DOCK_STATE_UNDOCKED);
++            } else if(NUM_CHAR_SWITCH.equals(intent.getAction())){ //kingberry.taochangbang NUM_CHAR_SWITCH_SUPPORT
++                mAaSwitch = intent.getBooleanExtra("switch_enable", true);
+             } else {
+                 try {
+                     IUiModeManager uiModeService = IUiModeManager.Stub.asInterface(
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values-zh-rCN/strings.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values-zh-rCN/strings.xml
+index 3b02a1b..9b765ad 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values-zh-rCN/strings.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values-zh-rCN/strings.xml
+@@ -4153,6 +4153,11 @@
+     <string name="battery_suggestion_title" product="default" msgid="4038053023336285165">"延长手机的电池续航时间"</string>
+     <string name="battery_suggestion_summary" msgid="4585677159811722359"></string>
+     <string name="gesture_prevent_ringing_screen_title" msgid="7840226017975251549">"阻止响铃"</string>
++
++    <!-- kingberry NUM_CHAR_SWITCH_SUPPORT -->
++    <string name="hardkey_inputswitch">数字-字母切换</string>
++    <string name="hardkey_inputswitch_summary">按Aa键进行数字和字母切换</string>
++
+     <string name="gesture_prevent_ringing_title" msgid="2483159069038138740">"同时按电源和音量调高按钮"</string>
+     <string name="gesture_prevent_ringing_sound_title" msgid="5724512060316688779">"阻止响铃的快捷方式"</string>
+     <string name="prevent_ringing_option_vibrate" msgid="7286821846542822661">"振动"</string>
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values/strings.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values/strings.xml
+index d700041..a795126 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values/strings.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/values/strings.xml
+@@ -10166,6 +10166,9 @@
+     <string name="scan_peffix_enable_summary">Null</string>
+     <!--<string name="scan_peffix_setting_title">Setting Peffix Character</string>-->
+     <string name="scan_peffix_setting_title">Peffix Character</string>
++    <!-- kingberry NUM_CHAR_SWITCH_SUPPORT -->
++    <string name="hardkey_inputswitch">Numbers-letters Switch</string>
++    <string name="hardkey_inputswitch_summary">Press Aa key to switch the input character type</string>
+ 
+     <string name="scan_suffix_enable_title">Suffix Character</string>
+     <string name="scan_suffix_enable_summary">Null</string>
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/xml/language_and_input.xml b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/xml/language_and_input.xml
+index 747d1b4..13a6db7 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/xml/language_and_input.xml
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/res/xml/language_and_input.xml
+@@ -28,6 +28,14 @@
+         android:icon="@drawable/ic_translate_24dp"
+         android:fragment="com.android.settings.localepicker.LocaleListEditor" />
+ 
++    <!-- kingberry.taochangbang add for :NUM_CHAR_SWITCH_SUPPORT -->
++    <CheckBoxPreference android:key="idata_inputswitch"
++        android:title="@string/hardkey_inputswitch"
++        android:summaryOn="@string/hardkey_inputswitch_summary"
++        android:summaryOff="@string/hardkey_inputswitch_summary"
++        android:persistent="false" />
++    <!-- kingberry.end -->
++
+     <PreferenceCategory
+         android:key="keyboards_category"
+         android:title="@string/keyboard_and_input_methods_category">
+diff --git a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/language/LanguageAndInputSettings.java b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/language/LanguageAndInputSettings.java
+index 73cfe27..eacc5fb 100644
+--- a/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/language/LanguageAndInputSettings.java
++++ b/LA.UM.7.6.2/LINUX/android/packages/apps/Settings/src/com/android/settings/language/LanguageAndInputSettings.java
+@@ -46,6 +46,15 @@ import com.android.settingslib.core.lifecycle.Lifecycle;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.List;
++//kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT
++import android.support.v7.preference.Preference;
++import android.support.v7.preference.CheckBoxPreference;
++import android.support.v7.preference.PreferenceScreen;
++import android.provider.Settings;
++import android.provider.Settings.System;
++import android.content.Intent;
++import android.content.IntentFilter;
++//kingberry.taochangbang end
+ 
+ public class LanguageAndInputSettings extends DashboardFragment {
+ 
+@@ -56,6 +65,10 @@ public class LanguageAndInputSettings extends DashboardFragment {
+     private static final String KEY_POINTER_AND_TTS_CATEGORY = "pointer_and_tts_category";
+     private static final String KEY_GAME_CONTROLLER_CATEGORY = "game_controller_settings_category";
+     private static final String KEY_PHYSICAL_KEYBOARD = "physical_keyboard_pref";
++    // kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT
++    private static final String KEY_IDATA_INPUTSWITCH = "idata_inputswitch";
++    private static CheckBoxPreference mInputSwitch;
++    // kingberry.end
+ 
+     @Override
+     public int getMetricsCategory() {
+@@ -78,7 +91,37 @@ public class LanguageAndInputSettings extends DashboardFragment {
+             return;
+         }
+         activity.setTitle(R.string.language_settings);
++        // kingberry.taochangbang add NUM_CHAR_SWITCH_SUPPORT
++        mInputSwitch = (CheckBoxPreference) getPreferenceScreen().findPreference(KEY_IDATA_INPUTSWITCH);
++
++        mInputSwitch.setChecked(Settings.System.getInt(getContentResolver(),
++                Settings.System.IDATA_INPUT_SWITCH_ENABLE, 1) != 0);
++        // kingberry.end
++    }
++    
++    // kingberry.taochangbang add for NUM_CHAR_SWITCH_SUPPORT -s
++    @Override
++    public boolean onPreferenceTreeClick(Preference preference) {
++
++        if (preference == mInputSwitch) {
++
++            Intent localIntent = new Intent("com.idatachina.keystate.iconchange");
++            localIntent.putExtra("keystate", 0);
++            getActivity().sendOrderedBroadcast(localIntent, null);
++
++            Settings.System.putInt(getContentResolver(),
++                    "idata_input_switch_value", 0);
++
++            Settings.System.putInt(getContentResolver(),
++                    "idata_input_switch_enable",
++                    mInputSwitch.isChecked() ? 1 : 0);
++
++            return true;
++
++        }
++        return super.onPreferenceTreeClick(preference);
+     }
++    // kingberry.end
+ 
+     @Override
+     protected int getPreferenceScreenResId() {

@@ -1,0 +1,2 @@
+git log -p --all -S 'string' 
+git log -p --all -G 'match regular expression'

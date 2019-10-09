@@ -1,0 +1,114 @@
+commit c1d678f0f459677b108f44ad5d69031f12fcef32
+Author: liaoyl <liaoyl@kingberry.com.cn>
+Date:   Tue Jul 2 10:05:36 2019 +0800
+
+    开机复制MCU固件到SD卡
+
+diff --git a/kbproject/prebuilt/mcucfg/MAXQ3255X_App.bin b/kbproject/prebuilt/mcucfg/MAXQ3255X_App.bin
+new file mode 100644
+index 0000000..4e63c61
+Binary files /dev/null and b/kbproject/prebuilt/mcucfg/MAXQ3255X_App.bin differ
+diff --git a/kbproject/prebuilt/mcucfg/copy_mcu_cfg.sh b/kbproject/prebuilt/mcucfg/copy_mcu_cfg.sh
+new file mode 100644
+index 0000000..24b6067
+--- /dev/null
++++ b/kbproject/prebuilt/mcucfg/copy_mcu_cfg.sh
+@@ -0,0 +1,4 @@
++#!/system/bin/sh
++
++cp /system/data/mcucfg/MAXQ3255X_App.bin /mnt/sdcard/
++chmod 0777 /mnt/sdcard/MAXQ3255X_App.bin
+diff --git a/kbproject/prebuilt/prebuilt_config.mk b/kbproject/prebuilt/prebuilt_config.mk
+index 1f6d2b2..e4ffc14 100644
+--- a/kbproject/prebuilt/prebuilt_config.mk
++++ b/kbproject/prebuilt/prebuilt_config.mk
+@@ -74,7 +74,8 @@ PRODUCT_COPY_FILES += $(CUSTOM_bootanimation)
+ ### Other common items start {@
+ PRODUCT_COPY_FILES += kbproject/prebuilt/app_prebuild.sh:system/bin/app_prebuild.sh
+ PRODUCT_COPY_FILES += kbproject/prebuilt/printerfont/BB16FontUnicode.bin:system/data/printcfg/BB16FontUnicode.bin
+-PRODUCT_COPY_FILES += kbproject/prebuilt/mcuapp/MAXQ3255X_App.bin:system/data/mcucfg/MAXQ3255X_App.bin
++PRODUCT_COPY_FILES += kbproject/prebuilt/mcucfg/MAXQ3255X_App.bin:system/data/mcucfg/MAXQ3255X_App.bin
++PRODUCT_COPY_FILES += kbproject/prebuilt/mcucfg/copy_mcu_cfg.sh:system/bin/copy_mcu_cfg.sh
+ ### Other common items end @}
+ 
+ ### INDEMIT start {@
+diff --git a/packages/apps/Settings/src/com/android/settings/CustomExtraSettingsReceiver.java b/packages/apps/Settings/src/com/android/settings/CustomExtraSettingsReceiver.java
+index 16f3b22..a513e5a 100644
+--- a/packages/apps/Settings/src/com/android/settings/CustomExtraSettingsReceiver.java
++++ b/packages/apps/Settings/src/com/android/settings/CustomExtraSettingsReceiver.java
+@@ -66,6 +66,26 @@ public class CustomExtraSettingsReceiver extends BroadcastReceiver {
+ 
+ 				//context.getPackageManager().setApplicationEnabledSetting("com.android.chrome", PackageManager.COMPONENT_ENABLED_STATE_DISABLED, 0);
+ 			}
++
++
++			new Thread(new Runnable() {
++                @Override
++                public void run() {
++                    try {
++                        String oldVersion = SystemProperties.get("old.custom.build.version", "no_defined");
++                        String currentVersion = SystemProperties.get("ro.custom.build.version");
++                        if (oldVersion.equals("no_defined") || !oldVersion.equals(currentVersion)) {
++                            Log.d(TAG, "start copy-mcu-cfg");
++                            SystemProperties.set("ctl.start", "copy-mcu-cfg");
++                            Thread.sleep(1000);
++                            SystemProperties.set("persist.sys.app.prebuild", "1");
++                            SystemProperties.set("old.custom.build.version", currentVersion);
++                        }
++                    } catch (InterruptedException e) {
++                        e.printStackTrace();
++                    }
++                }
++            }).start();
+         }
+             
+     }
+diff --git a/system/core/rootdir/init.rc b/system/core/rootdir/init.rc
+index 57970ce..adc1853 100644
+--- a/system/core/rootdir/init.rc
++++ b/system/core/rootdir/init.rc
+@@ -577,6 +577,9 @@ on boot
+ 
+     #kingberry.add for prebuild app
+     chmod 0777 /system/bin/app_prebuild.sh
++
++    chmod 0777 /system/bin/copy_mcu_cfg.sh
++    chown root root /system/bin/copy_mcu_cfg.sh
+ 	
+     # Define default initial receive window size in segments.
+     setprop net.tcp.default_init_rwnd 60
+@@ -678,6 +681,10 @@ service monkeyT /system/bin/monkey_test.sh
+     disabled
+     oneshot
+ 
++service copy-mcu-cfg /system/bin/copy_mcu_cfg.sh
++    oneshot
++    disabled
++
+ on property:persist.sys.monkey=1
+     start monkeyT
+     setprop persist.sys.monkey 0
+diff --git a/system/sepolicy/file_contexts b/system/sepolicy/file_contexts
+index 0717dff..fbbf723 100644
+--- a/system/sepolicy/file_contexts
++++ b/system/sepolicy/file_contexts
+@@ -220,6 +220,7 @@
+ /system/bin/mcuapp              u:object_r:mcuapp_exec:s0
+ /system/bin/monkey_test.sh        u:object_r:monkeyT_exec:s0
+ /system/bin/app_prebuild.sh        u:object_r:app-prebuild_exec:s0
++/system/bin/copy_mcu_cfg.sh        u:object_r:copy-mcu-cfg_exec:s0
+ #############################
+ # Vendor files
+ #
+diff --git a/system/sepolicy/tzdatacheck.te b/system/sepolicy/tzdatacheck.te
+index f35ff78..b4fa022 100644
+--- a/system/sepolicy/tzdatacheck.te
++++ b/system/sepolicy/tzdatacheck.te
+@@ -45,3 +45,7 @@ type app-prebuild, domain, domain_deprecated;
+ type app-prebuild_exec, exec_type, file_type;
+ init_daemon_domain(app-prebuild)
+ 
++type copy-mcu-cfg, domain, domain_deprecated;
++type copy-mcu-cfg_exec, exec_type, file_type;
++init_daemon_domain(copy-mcu-cfg)
++
